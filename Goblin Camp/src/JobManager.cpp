@@ -13,6 +13,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License 
 along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
+#include "stdafx.hpp"
 
 #include <list>
 
@@ -136,7 +137,7 @@ void JobManager::Update() {
 
 	//Check the waiting list for jobs that have completed prerequisites, and move them to the
 	//job queue if so, remove removables, and retry retryables, remove unpauseds
-	for (std::list<boost::shared_ptr<Job> >::iterator jobIter = waitingList.begin(); jobIter != waitingList.end(); ++jobIter) {
+	for (std::list<boost::shared_ptr<Job> >::iterator jobIter = waitingList.begin(); jobIter != waitingList.end(); ) {
 
 		if ((*jobIter)->Removable()) {
 			jobIter = waitingList.erase(jobIter);
@@ -149,15 +150,18 @@ void JobManager::Update() {
 			if (!(*jobIter)->Paused()) {
 				AddJob(*jobIter);
 				jobIter = waitingList.erase(jobIter);
-			} else if (!(*jobIter)->Parent().lock() && !(*jobIter)->PreReqs()->empty()) {
-				//Job has unfinished prereqs, itsn't removable and is NOT a prereq itself
-				for (std::list<boost::weak_ptr<Job> >::iterator pri = (*jobIter)->PreReqs()->begin(); pri != (*jobIter)->PreReqs()->end(); ++pri) {
-					if (pri->lock()) {
-						pri->lock()->Paused(false);
+			} else {
+				if (!(*jobIter)->Parent().lock() && !(*jobIter)->PreReqs()->empty()) {
+					//Job has unfinished prereqs, itsn't removable and is NOT a prereq itself
+					for (std::list<boost::weak_ptr<Job> >::iterator pri = (*jobIter)->PreReqs()->begin(); pri != (*jobIter)->PreReqs()->end(); ++pri) {
+						if (pri->lock()) {
+							pri->lock()->Paused(false);
+						}
 					}
+				} else if (!(*jobIter)->Parent().lock()) {
+					(*jobIter)->Paused(false);
 				}
-			} else if (!(*jobIter)->Parent().lock()) {
-				(*jobIter)->Paused(false);
+				++jobIter;
 			}
 		}
 	}
@@ -166,9 +170,11 @@ void JobManager::Update() {
 	//remove them
 	for (int i = 0; i < PRIORITY_COUNT; ++i) {
 		for (std::list<boost::shared_ptr<Job> >::iterator jobi = availableList[i].begin();
-			jobi != availableList[i].end(); ++jobi) {
+			jobi != availableList[i].end(); ) {
 				if ((*jobi)->Completed() && (*jobi)->PreReqsCompleted()) {
 					jobi = availableList[i].erase(jobi);
+				} else {
+					++jobi;
 				}
 		}
 	}
