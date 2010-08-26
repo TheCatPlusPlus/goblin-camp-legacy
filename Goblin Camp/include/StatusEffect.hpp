@@ -25,6 +25,7 @@ enum NPCStat {
 	MOVESPEED,
 	DODGE,
 	STRENGTH,
+	SIZE,
 	STAT_COUNT
 };
 
@@ -47,7 +48,8 @@ enum StatusEffectType {
 	POISON,
 	BLEEDING,
 	FLYING,
-	BADSLEEP
+	BADSLEEP,
+	RAGE
 };
 
 struct StatusEffect {
