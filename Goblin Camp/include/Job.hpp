@@ -30,6 +30,7 @@ enum JobPriority {
 	HIGH,
 	MED,
 	LOW,
+	WAITING,
 	PRIORITY_COUNT
 };
 
@@ -149,6 +150,7 @@ public:
 	void ReserveSpot(boost::weak_ptr<Stockpile>, Coordinate);
 	void UnreserveSpot();
 	void ConnectToEntity(boost::weak_ptr<Entity>);
+	boost::weak_ptr<Entity> ConnectedEntity();
 	void ReserveSpace(boost::weak_ptr<Container>);
 
 	bool internal;

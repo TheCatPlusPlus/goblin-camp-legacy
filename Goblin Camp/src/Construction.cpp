@@ -466,25 +466,21 @@ bool Construction::SpawnProductionJob() {
 				item.lock()->Reserve(true);
 			} else {
 				//Not all items available, cancel job and unreserve the reserved items.
-				for (std::list<boost::weak_ptr<Item> >::iterator resi = componentList.begin(); resi != componentList.end(); ++resi) {
-					resi->lock()->Reserve(false);
-				}
+				ReserveComponents(false);
 				jobList.pop_front();
 				return false;
 			}
 		}
 
 		//Unreserve the items now, because the individual jobs will reserve them for themselves
-		for (std::list<boost::weak_ptr<Item> >::iterator resi = componentList.begin(); resi != componentList.end(); ++resi) {
-			resi->lock()->Reserve(false);
-		}
+		ReserveComponents(false);
 
 		boost::shared_ptr<Job> newProductionJob(new Job("Produce "+Item::ItemTypeToString(jobList.front()), MED, 0, false));
 		newProductionJob->ConnectToEntity(shared_from_this());
 		newProductionJob->ReserveEntity(shared_from_this());
 
 		for (int compi = 0; compi < (signed int)Item::Components(jobList.front()).size(); ++compi) {
-			boost::shared_ptr<Job> newPickupJob(new Job("Pickup materials"));
+			boost::shared_ptr<Job> newPickupJob(new Job("Pickup " + Item::ItemCategoryToString(Item::Components(jobList.front(), compi)) + " for " + Presets[Type()].name));
 			newPickupJob->tasks.push_back(Task(FIND, Coordinate(0,0), boost::shared_ptr<Entity>(), Item::Components(jobList.front(), compi), APPLYMINIMUMS));
 			newPickupJob->tasks.push_back(Task(MOVE));
 			newPickupJob->tasks.push_back(Task(TAKE));
@@ -594,18 +590,24 @@ void Construction::Dismantle() {
 			jobList.clear();
 		}
 
-		boost::shared_ptr<Job> dismantleJob(new Job((boost::format("Dismantle %s") % name).str(), MED, 0, false));
-		dismantleJob->ConnectToEntity(shared_from_this());
-		dismantleJob->tasks.push_back(Task(MOVEADJACENT, Position(), shared_from_this()));
-		dismantleJob->tasks.push_back(Task(DISMANTLE, Position(), shared_from_this()));
-		JobManager::Inst()->AddJob(dismantleJob);
+		if (CheckMaterialsPresent() && Condition() > 0) { 
+			boost::shared_ptr<Job> dismantleJob(new Job((boost::format("Dismantle %s") % name).str(), HIGH, 0, false));
+			dismantleJob->ConnectToEntity(shared_from_this());
+			dismantleJob->tasks.push_back(Task(MOVEADJACENT, Position(), shared_from_this()));
+			dismantleJob->tasks.push_back(Task(DISMANTLE, Position(), shared_from_this()));
+			JobManager::Inst()->AddJob(dismantleJob);
+		} else { // Remove construction and cancel associated jobs
+			ReserveComponents(false);
+			JobManager::Inst()->CancelJob(shared_from_this());
+			Game::Inst()->RemoveConstruction(boost::static_pointer_cast<Construction>(shared_from_this()));
+		}
 	}
 }
 
 Panel *Construction::GetContextMenu() {
 	return ConstructionDialog::ConstructionInfoDialog(this);
 }
-
+	
 void Construction::Damage(Attack* attack) {
 	double damageModifier = 1.0;
 
@@ -651,6 +653,11 @@ void Construction::Explode() {
 	}
 	while (!materialsUsed->empty()) { materialsUsed->RemoveItem(materialsUsed->GetFirstItem()); }
 
+}
+
+bool Construction::CheckMaterialsPresent() { 
+	if ((signed int)materials.size() != materialsUsed->size()) { return false; }
+	return true;
 }
 
 ConstructionPreset::ConstructionPreset() :
