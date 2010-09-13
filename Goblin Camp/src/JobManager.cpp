@@ -23,6 +23,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "JobManager.hpp"
 #include "Announce.hpp"
 #include "Game.hpp"
+#include "KuhnMunkres.hpp"
 
 JobManager::JobManager() {}
 JobManager *JobManager::instance = 0;
@@ -66,50 +67,60 @@ void JobManager::CancelJob(boost::weak_ptr<Job> oldJob, std::string msg, TaskRes
 	}
 }
 
-//Draw() doesn't conform to the design, it'll only draw jobs from the 4 hardcoded lists
-//TODO: Make Draw prioritycount agnostic
-//Take into account though that right now this is a debug only view
-void JobManager::Draw(Coordinate pos, int from, int count, TCODConsole* console) {
+void JobManager::CancelJob(boost::weak_ptr<Entity> construction) {
+	boost::shared_ptr<Entity> construction_ptr, job_ptr, job_parent_ptr;
+	for (int i=0; i<PRIORITY_COUNT; i++) {
+		for (std::list<boost::shared_ptr<Job> >::iterator jobi = availableList[i].begin(); jobi != availableList[i].end();) {
+			job_parent_ptr.reset();
+			job_ptr = (*jobi)->ConnectedEntity().lock();
+			construction_ptr = construction.lock();
+			if ((*jobi)->Parent().lock()) { job_parent_ptr = (*jobi)->Parent().lock()->ConnectedEntity().lock(); }
+			// If a job is connected to a contruction task which is cancelled or parent is such a task then remove them
+			if (construction_ptr && 
+				( (job_ptr && job_ptr->Uid() == construction_ptr->Uid()) || 
+				(job_parent_ptr && job_parent_ptr->Uid() == construction_ptr->Uid()) ) ) { 
+				std::map<int,boost::shared_ptr<NPC> >::iterator npc = Game::Inst()->npcList.find((*jobi)->Assigned());
+				if (npc != Game::Inst()->npcList.end())  { npc->second->AbortCurrentJob(false); }
+				jobi = availableList[i].erase(jobi);
+			} else {
+				++jobi;
+			}
+		}
+	}
+}
+
+void JobManager::Draw(Coordinate pos, int from, int width, int height, TCODConsole* console) {
 	int skip = 0;
 	int y = pos.Y();
+	std::map<int,boost::shared_ptr<NPC> >::iterator npc;
+	TCODColor color_mappings[] = { TCODColor::green, TCODColor::yellow, TCODColor::red, TCODColor::grey };
 
-	console->setDefaultForeground(TCODColor::lightCyan);
-	for (std::list<boost::shared_ptr<Job> >::iterator highIter = availableList[HIGH].begin(); highIter != availableList[HIGH].end(); ++highIter) {
-		if (skip < from) ++skip;
-		else {
+	for (int i=0; i<PRIORITY_COUNT; i++) {
+		console->setDefaultForeground(color_mappings[i]);
+		for (std::list<boost::shared_ptr<Job> >::iterator jobi = availableList[i].begin(); jobi != availableList[i].end(); ++jobi) {
+			if (skip < from) ++skip;
+			else {
+				npc = Game::Inst()->npcList.find((*jobi)->Assigned());
+				if (npc != Game::Inst()->npcList.end()) { 
+					console->print(pos.X(), y, "%c", npc->second->GetNPCSymbol());
+				}
+				console->print(pos.X() + 2, y, "%s", (*jobi)->name.c_str());
 
-			console->print(pos.X(), y, "%s", (*highIter)->name.c_str());
-			if (++y - pos.Y() >= count) return;
+#if DEBUG
+				if (npc != Game::Inst()->npcList.end()) {
+					if (npc->second->currentTask() != 0) {
+						console->print(pos.X() + 45, y, "%s", (*jobi)->ActionToString(npc->second->currentTask()->action).c_str());
+					}
+				}
+				console->print(pos.X() + width - 11, y, "A-> %d", (*jobi)->Assigned());
+#endif
+				if (++y - pos.Y() >= height) {
+					console->setDefaultForeground(TCODColor::white);
+					return;
+				}
+			}
 		}
 	}
-
-	console->setDefaultForeground(TCODColor::white);
-	for (std::list<boost::shared_ptr<Job> >::iterator medIter = availableList[MED].begin(); medIter != availableList[MED].end(); ++medIter) {
-		if (skip < from) ++skip;
-		else {
-			console->print(pos.X(), y, "%s", (*medIter)->name.c_str());
-			if (++y - pos.Y() >= count) return;
-		}
-	}
-
-	console->setDefaultForeground(TCODColor::lightGrey);
-	for (std::list<boost::shared_ptr<Job> >::iterator lowIter = availableList[LOW].begin(); lowIter != availableList[LOW].end(); ++lowIter) {
-		if (skip < from) ++skip;
-		else {
-			console->print(pos.X(), y, "%s", (*lowIter)->name.c_str());
-			if (++y - pos.Y() >= count) return;
-		}
-	}
-
-	console->setDefaultForeground(TCODColor::grey);
-	for (std::list<boost::shared_ptr<Job> >::iterator waitIter = waitingList.begin(); waitIter != waitingList.end(); ++waitIter) {
-		if (skip < from) ++skip;
-		else {
-			console->print(pos.X(), y, "%s", (*waitIter)->name.c_str());
-			if (++y - pos.Y() >= count) return;
-		}
-	}
-
 	console->setDefaultForeground(TCODColor::white);
 }
 
@@ -185,7 +196,7 @@ int JobManager::JobAmount() {
 	for (int i = 0; i < PRIORITY_COUNT; ++i) {
 		count += availableList[i].size();
 	}
-	count += waitingList.size(); 
+	count += waitingList.size();
 	return count;
 }
 
@@ -206,9 +217,93 @@ boost::weak_ptr<Job> JobManager::GetJobByListIndex(int index) {
 	return boost::weak_ptr<Job>();
 }
 
+void JobManager::RemoveJobByNPC(int uid) {
+	for (int i = 0; i < PRIORITY_COUNT; ++i) {
+		for (std::list<boost::shared_ptr<Job> >::iterator jobi = availableList[i].begin(); jobi != availableList[i].end(); ++jobi) {
+			if ((*jobi)->Assigned() == uid) {
+				jobi = availableList[i].erase(jobi);
+				return;
+			}
+		}
+	}
+}
+
 void JobManager::Reset() {
 	for (int i = 0; i < PRIORITY_COUNT; ++i) {
 		availableList[i].clear();
 	}
 	waitingList.clear();
+	npcsWaiting.clear();
+}
+
+void JobManager::NPCWaiting(int uid) {
+	for(std::vector<int>::iterator it = npcsWaiting.begin(); it != npcsWaiting.end(); it++) {
+		if(*it == uid) {
+			return;
+		}
+	}
+	npcsWaiting.push_back(uid);
+}
+
+void JobManager::NPCNotWaiting(int uid) {
+	for(std::vector<int>::iterator it = npcsWaiting.begin(); it != npcsWaiting.end(); it++) {
+		if(*it == uid) {
+			npcsWaiting.erase(it);
+			return;
+		}
+	}
+}
+
+void JobManager::ClearWaitingNpcs() {
+	npcsWaiting.clear();
+}
+
+void JobManager::AssignJobs() {
+	for (int i = 0; i < PRIORITY_COUNT && !npcsWaiting.empty(); i++) {
+		if(!availableList[i].empty()) {
+			std::vector<boost::shared_ptr<Job> > jobsToAssign;
+			for (std::list<boost::shared_ptr<Job> >::iterator jobi = availableList[i].begin();
+				 jobi != availableList[i].end(); ++jobi) {
+				if ((*jobi)->Assigned() == -1 && !(*jobi)->Removable()) {
+					jobsToAssign.push_back(*jobi);
+				}
+			}
+			if(!jobsToAssign.empty()) {
+				int matrixSize = std::max(jobsToAssign.size(), npcsWaiting.size());
+				boost::numeric::ublas::matrix<int> m(matrixSize, matrixSize);
+				for(int x = 0; x < matrixSize; x++) {
+					for(int y = 0; y < matrixSize; y++) {
+						if(x >= npcsWaiting.size() || y >= jobsToAssign.size()) {
+							m(x, y) = 1;
+						} else {
+							boost::shared_ptr<Job> job = jobsToAssign[y];
+							boost::shared_ptr<NPC> npc = Game::Inst()->npcList[npcsWaiting[x]];
+							if(job->Menial() == npc->Expert() ||
+							   job->tasks.empty() ||
+							   (job->tasks[0].target.X() == 0 && job->tasks[0].target.Y() == 0)) {
+								m(x, y) = 1;
+							} else {
+								m(x, y) = 10000 - Distance(job->tasks[0].target, npc->Position());
+							}
+						}
+					}
+				}
+				
+				std::vector<int> assignments = FindBestMatching(m);
+				
+				for(int i = 0, n = 0; n < npcsWaiting.size(); i++, n++) {
+					int jobNum = assignments[i];
+					if(jobNum < jobsToAssign.size()) {
+						int npcNum = npcsWaiting[n];
+						boost::shared_ptr<Job> job = jobsToAssign[jobNum];
+						boost::shared_ptr<NPC> npc = Game::Inst()->npcList[npcNum];
+						job->Assign(npcNum);
+						npc->StartJob(job);
+						npcsWaiting.erase(npcsWaiting.begin() + n);
+						n--;
+					}
+				}
+			}
+		}
+	}
 }

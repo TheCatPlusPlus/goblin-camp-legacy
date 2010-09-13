@@ -98,8 +98,9 @@ NPC::NPC(Coordinate pos, boost::function<bool(boost::shared_ptr<NPC>)> findJob,
 	inventory->SetInternal();
 	Position(pos,true);
 
-	thirst += rand() % 10; //Just for some variety
-	hunger += rand() % 10;
+	thirst = thirst - (THIRST_THRESHOLD / 2) + rand() % (THIRST_THRESHOLD);
+	hunger = hunger - (HUNGER_THRESHOLD / 2) + rand() % (HUNGER_THRESHOLD);
+	weariness = weariness - (WEARY_THRESHOLD / 2) + rand() % (WEARY_THRESHOLD);
 
 	path = new TCODPath(Map::Inst()->Width(), Map::Inst()->Height(), Map::Inst(), (void*)this);
 
@@ -151,22 +152,23 @@ void NPC::TaskFinished(TaskResult result, std::string msg) {
 		std::cout<<msg<<"\n";
 	}
 #endif
-	if (result == TASKSUCCESS) {
-		if (++taskIndex >= (signed int)jobs.front()->tasks.size()) {
-			jobs.front()->Complete();
+	if (jobs.size() > 0) {
+		if (result == TASKSUCCESS) {
+			if (++taskIndex >= (signed int)jobs.front()->tasks.size()) {
+				jobs.front()->Complete();
+				jobs.pop_front();
+				taskIndex = 0;
+				foundItem = boost::weak_ptr<Item>();
+			}
+		} else {
+			if (!jobs.front()->internal) JobManager::Inst()->CancelJob(jobs.front(), msg, result);
 			jobs.pop_front();
 			taskIndex = 0;
+			DropItem(carried);
+			carried.reset();
 			foundItem = boost::weak_ptr<Item>();
 		}
-	} else {
-		if (!jobs.front()->internal) JobManager::Inst()->CancelJob(jobs.front(), msg, result);
-		jobs.pop_front();
-		taskIndex = 0;
-		DropItem(carried);
-		carried.reset();
-		foundItem = boost::weak_ptr<Item>();
 	}
-
 	taskBegun = false;
 }
 
@@ -178,7 +180,7 @@ void NPC::HandleThirst() {
 		if ((*jobIter)->name.find("Drink") != std::string::npos) found = true;
 	}
 	if (!found) {
-		boost::weak_ptr<Item> item = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Drink"));
+		boost::weak_ptr<Item> item = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Drink"), Position());
 		if (!item.lock()) {tmpCoord = Game::Inst()->FindWater(Position());}
 		if (!item.lock() && tmpCoord.X() == -1) { //Nothing to drink!
 			//:ohdear:
@@ -219,8 +221,8 @@ void NPC::HandleHunger() {
 		if ((*jobIter)->name.find("Eat") != std::string::npos) found = true;
 	}
 	if (!found) {
-		boost::weak_ptr<Item> item = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Prepared food"));
-		if (!item.lock()) {item = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Food"));}
+		boost::weak_ptr<Item> item = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Prepared food"), Position());
+		if (!item.lock()) {item = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Food"), Position());}
 		if (!item.lock()) { //Nothing to eat!
 			//:ohdear:
 		} else { //Something to eat!
@@ -273,7 +275,7 @@ void NPC::Update() {
 		}
 	}
 
-	effectiveStats[MOVESPEED] = std::max(1, effectiveStats[MOVESPEED]-Map::Inst()->GetMoveModifier(x,y));
+	if (!HasEffect(FLYING)) effectiveStats[MOVESPEED] = std::max(1, effectiveStats[MOVESPEED]-Map::Inst()->GetMoveModifier(x,y));
 
 	if (needsNutrition) {
 		++thirst; ++hunger;
@@ -364,14 +366,18 @@ AiThink NPC::Think() {
 
 	lastMoveResult = Move(lastMoveResult);
 
-	if (velocity == 0) timeCount += thinkSpeed; //Can't think while hurtling through the air, sorry
-	else if (!jobs.empty()) TaskFinished(TASKFAILFATAL, "Flying through the air");
-
+	if (velocity == 0) {
+		timeCount += thinkSpeed; //Can't think while hurtling through the air, sorry
+	} else if (!jobs.empty()) {
+		TaskFinished(TASKFAILFATAL, "Flying through the air");
+		JobManager::Inst()->NPCNotWaiting(uid);
+	} 
 	while (timeCount > UPDATES_PER_SECOND) {
 
 		if (rand() % 2 == 0) React(boost::static_pointer_cast<NPC>(shared_from_this()));
 
 		if (aggressor.lock()) {
+			JobManager::Inst()->NPCNotWaiting(uid);
 			if (Game::Inst()->Adjacent(Position(), aggressor)) Hit(aggressor);
 			if (rand() % 10 <= 3 && Distance(Position(), aggressor.lock()->Position()) > LOS_DISTANCE) {
 				aggressor.reset();
@@ -462,7 +468,6 @@ MOVENEARend:
 					tmp = boost::static_pointer_cast<Construction>(currentEntity().lock())->Build();
 					if (tmp > 0) {
 						Announce::Inst()->AddMsg((boost::format("%s completed") % currentEntity().lock()->Name()).str(), TCODColor::white, currentEntity().lock()->Position());
-						Camp::Inst()->UpdateCenter(currentEntity().lock()->Position());
 						TaskFinished(TASKSUCCESS);
 						break;
 					} else if (tmp == BUILD_NOMATERIAL) {
@@ -553,7 +558,7 @@ MOVENEARend:
 				break;
 
 			case FIND:
-				foundItem = Game::Inst()->FindItemByCategoryFromStockpiles(currentTask()->item, currentTask()->flags);
+				foundItem = Game::Inst()->FindItemByCategoryFromStockpiles(currentTask()->item, currentTask()->target, currentTask()->flags);
 				if (!foundItem.lock()) {
 					TaskFinished(TASKFAILFATAL); 
 #ifdef DEBUG
@@ -859,6 +864,7 @@ MOVENEARend:
 			}
 		} else {
 			if (HasEffect(PANIC)) {
+				JobManager::Inst()->NPCNotWaiting(uid);
 				bool enemyFound = false;
 				if (jobs.empty() && !nearNpcs.empty()) {
 					boost::shared_ptr<Job> fleeJob(new Job("Flee"));
@@ -885,18 +891,24 @@ MOVENEARend:
 				}
 			} else if (!GetSquadJob(boost::static_pointer_cast<NPC>(shared_from_this())) && 
 				!FindJob(boost::static_pointer_cast<NPC>(shared_from_this()))) {
-					boost::shared_ptr<Job> idleJob(new Job("Idle"));
-					idleJob->internal = true;
-					idleJob->tasks.push_back(Task(MOVENEAR, faction == 0 ? Camp::Inst()->Center() : Position()));
-					idleJob->tasks.push_back(Task(WAIT, Coordinate(rand() % 10, 0)));
-					jobs.push_back(idleJob);
-					if (Distance(Camp::Inst()->Center().X(), Camp::Inst()->Center().Y(), x, y) < 15) run = false;
-					else run = true;
+				boost::shared_ptr<Job> idleJob(new Job("Idle"));
+				idleJob->internal = true;
+				idleJob->tasks.push_back(Task(MOVENEAR, faction == 0 ? Camp::Inst()->Center() : Position()));
+				idleJob->tasks.push_back(Task(WAIT, Coordinate(rand() % 10, 0)));
+				jobs.push_back(idleJob);
+				if (Distance(Camp::Inst()->Center().X(), Camp::Inst()->Center().Y(), x, y) < 15) run = false;
+				else run = true;
 			}
 		}
 	}
 
 	return AINOTHING;
+}
+
+void NPC::StartJob(boost::shared_ptr<Job> job) {
+	TaskFinished(TASKOWNDONE, "");
+	jobs.push_back(job);
+	run = true;
 }
 
 TaskResult NPC::Move(TaskResult oldResult) {
@@ -940,6 +952,16 @@ void NPC::Draw(Coordinate upleft, TCODConsole *console) {
 			console->putCharEx(screenx, screeny, _graphic, _color, _bgcolor);
 		} else {
 			console->putCharEx(screenx, screeny, statusEffectIterator->graphic, statusEffectIterator->color, _bgcolor);
+		}
+	}
+}
+
+void NPC::GetTooltip(int x, int y, Tooltip *tooltip) {
+	Entity::GetTooltip(x, y, tooltip);
+	if(faction == 0 && !jobs.empty()) {
+		boost::shared_ptr<Job> job = jobs.front();
+		if(job->name != "Idle") {
+			tooltip->AddEntry(TooltipEntry((boost::format("  %s") % job->name).str(), TCODColor::grey));
 		}
 	}
 }
@@ -1007,6 +1029,7 @@ void tFindPath(TCODPath *path, int x0, int y0, int x1, int y1, boost::try_mutex 
 
 bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 	if (boost::shared_ptr<Squad> squad = npc->MemberOf().lock()) {
+		JobManager::Inst()->NPCNotWaiting(npc->uid);
 		npc->aggressive = true;
 		boost::shared_ptr<Job> newJob(new Job("Follow orders"));
 		newJob->internal = true;
@@ -1019,8 +1042,8 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 				++attacki) {
 					if (attacki->Type() == DAMAGE_WIELDED) {
 						if (Game::Inst()->FindItemByCategoryFromStockpiles(
-							squad->Weapon()).lock()) {
-								newJob->tasks.push_back(Task(FIND, Coordinate(0,0), boost::shared_ptr<Entity>(), 
+							squad->Weapon(), npc->Position()).lock()) {
+								newJob->tasks.push_back(Task(FIND, npc->Position(), boost::shared_ptr<Entity>(), 
 									squad->Weapon()));
 								newJob->tasks.push_back(Task(MOVE));
 								newJob->tasks.push_back(Task(TAKE));
@@ -1036,8 +1059,8 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 
 		if (npc->WieldingRangedWeapon()) {
 			if (!npc->quiver.lock()) {
-				if (Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Quiver")).lock()) {
-						newJob->tasks.push_back(Task(FIND, Coordinate(0,0), boost::shared_ptr<Entity>(), 
+				if (Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Quiver"), npc->Position()).lock()) {
+						newJob->tasks.push_back(Task(FIND, npc->Position(), boost::shared_ptr<Entity>(), 
 							Item::StringToItemCategory("Quiver")));
 						newJob->tasks.push_back(Task(MOVE));
 						newJob->tasks.push_back(Task(TAKE));
@@ -1048,9 +1071,9 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 				}
 			} else if (npc->quiver.lock()->empty()) {
 				if (Game::Inst()->FindItemByCategoryFromStockpiles(
-					npc->mainHand.lock()->GetAttack().Projectile()).lock()) {
+					npc->mainHand.lock()->GetAttack().Projectile(), npc->Position()).lock()) {
 						for (int i = 0; i < 10; ++i) {
-							newJob->tasks.push_back(Task(FIND, Coordinate(0,0), boost::shared_ptr<Entity>(), 
+							newJob->tasks.push_back(Task(FIND, npc->Position(), boost::shared_ptr<Entity>(), 
 								npc->mainHand.lock()->GetAttack().Projectile()));
 							newJob->tasks.push_back(Task(MOVE));
 							newJob->tasks.push_back(Task(TAKE));
@@ -1095,12 +1118,7 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 
 bool NPC::JobManagerFinder(boost::shared_ptr<NPC> npc) {
 	if (!npc->MemberOf().lock()) {
-		boost::shared_ptr<Job> newJob(JobManager::Inst()->GetJob(npc->uid).lock());
-		if (newJob)  {
-			npc->jobs.push_back(newJob);
-			npc->run = true;
-			return true;
-		}
+		JobManager::Inst()->NPCWaiting(npc->uid);
 	}
 	return false;
 }
@@ -1111,6 +1129,7 @@ void NPC::PlayerNPCReact(boost::shared_ptr<NPC> npc) {
 			Game::Inst()->FindNearbyNPCs(npc, true);
 			for (std::list<boost::weak_ptr<NPC> >::iterator npci = npc->nearNpcs.begin(); npci != npc->nearNpcs.end(); ++npci) {
 				if (npci->lock()->faction != npc->faction) {
+					JobManager::Inst()->NPCNotWaiting(npc->uid);
 					boost::shared_ptr<Job> killJob(new Job("Kill "+npci->lock()->name));
 					killJob->internal = true;
 					killJob->tasks.push_back(Task(KILL, npci->lock()->Position(), *npci));
@@ -1127,6 +1146,7 @@ void NPC::PlayerNPCReact(boost::shared_ptr<NPC> npc) {
 		Game::Inst()->FindNearbyNPCs(npc);
 		for (std::list<boost::weak_ptr<NPC> >::iterator npci = npc->nearNpcs.begin(); npci != npc->nearNpcs.end(); ++npci) {
 			if (npci->lock()->GetFaction() != npc->faction && npci->lock()->aggressive) {
+				JobManager::Inst()->NPCNotWaiting(npc->uid);
 				while (!npc->jobs.empty()) npc->TaskFinished(TASKFAILNONFATAL);
 				npc->AddEffect(PANIC);
 			}
@@ -1191,7 +1211,7 @@ bool NPC::HostileAnimalFindJob(boost::shared_ptr<NPC> animal) {
 bool NPC::HungryAnimalFindJob(boost::shared_ptr<NPC> animal) {
 	//We could use Task(FIND for this, but it doesn't give us feedback if there's
 	//any food available
-	boost::weak_ptr<Item> wfood = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Food"));
+	boost::weak_ptr<Item> wfood = Game::Inst()->FindItemByCategoryFromStockpiles(Item::StringToItemCategory("Food"), animal->Position());
 	if (boost::shared_ptr<Item> food = wfood.lock()) {
 		//Found a food item
 		boost::shared_ptr<Job> stealJob(new Job("Steal food"));
@@ -1239,6 +1259,18 @@ bool NPC::HasEffect(StatusEffectType effect) {
 }
 
 std::list<StatusEffect>* NPC::StatusEffects() { return &statusEffects; }
+
+/*TODO: Calling jobs.clear() isn't a good idea as the NPC can have more than one job queued up, should use
+TaskFinished(TASKFAILFATAL) or just remove the job we want aborted*/
+void NPC::AbortCurrentJob(bool remove_job) {
+	jobs.clear();
+	if (carried.lock()) {
+		carried.lock()->Reserve(false);
+		DropItem(carried);
+		carried.reset();
+	}
+	if (remove_job) { JobManager::Inst()->RemoveJobByNPC(uid); }
+}
 
 void NPC::Hit(boost::weak_ptr<Entity> target) {
 	if (target.lock()) {
@@ -1529,6 +1561,8 @@ NPCType NPC::StringToNPCType(std::string typeName) {
 	return NPCTypeNames[typeName];
 }
 
+int NPC::GetNPCSymbol() { return Presets[type].graphic; }
+
 void NPC::InitializeAIFunctions() {
 	if (NPC::Presets[type].ai == "PlayerNPC") {
 		FindJob = boost::bind(NPC::JobManagerFinder, _1);
@@ -1577,7 +1611,7 @@ void NPC::FindNewWeapon() {
 		weaponValue = mainHand.lock()->RelativeValue();
 	}
 	ItemCategory weaponCategory = squad.lock() ? squad.lock()->Weapon() : Item::StringToItemCategory("Weapon");
-	boost::weak_ptr<Item> newWeapon = Game::Inst()->FindItemByCategoryFromStockpiles(weaponCategory, BETTERTHAN, weaponValue);
+	boost::weak_ptr<Item> newWeapon = Game::Inst()->FindItemByCategoryFromStockpiles(weaponCategory, Position(), BETTERTHAN, weaponValue);
 	if (boost::shared_ptr<Item> weapon = newWeapon.lock()) {
 		boost::shared_ptr<Job> weaponJob(new Job("Grab weapon"));
 		weaponJob->internal = true;
@@ -1596,7 +1630,7 @@ void NPC::FindNewArmor() {
 		armorValue = armor.lock()->RelativeValue();
 	}
 	ItemCategory armorCategory = squad.lock() ? squad.lock()->Armor() : Item::StringToItemCategory("Armor");
-	boost::weak_ptr<Item> newArmor = Game::Inst()->FindItemByCategoryFromStockpiles(armorCategory, BETTERTHAN, armorValue);
+	boost::weak_ptr<Item> newArmor = Game::Inst()->FindItemByCategoryFromStockpiles(armorCategory, Position(), BETTERTHAN, armorValue);
 	if (boost::shared_ptr<Item> arm = newArmor.lock()) {
 		boost::shared_ptr<Job> armorJob(new Job("Grab armor"));
 		armorJob->internal = true;

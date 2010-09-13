@@ -19,6 +19,8 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 
 #include <cassert>
 #include <cstdarg>
+#include <list>
+#include <boost/foreach.hpp>
 
 namespace py = boost::python;
 

@@ -29,14 +29,21 @@ private:
 	static JobManager *instance;
 	std::list<boost::shared_ptr<Job> > availableList[PRIORITY_COUNT];
 	std::list<boost::shared_ptr<Job> > waitingList;
+	std::vector<int> npcsWaiting;
 public:
 	static JobManager* Inst();
 	void Reset();
 	void AddJob(boost::shared_ptr<Job>);
-	void Draw(Coordinate, int from = 0, int count = 20, TCODConsole* = TCODConsole::root);
+	void Draw(Coordinate, int from = 0, int width = 40 ,int height = 40, TCODConsole* = TCODConsole::root);
 	void CancelJob(boost::weak_ptr<Job>, std::string, TaskResult);
+	void CancelJob(boost::weak_ptr<Entity>);
 	boost::weak_ptr<Job> GetJob(int);
 	boost::weak_ptr<Job> GetJobByListIndex(int);
+	void RemoveJobByNPC(int uid);
 	void Update();
 	int JobAmount();
+	void NPCWaiting(int);
+	void NPCNotWaiting(int);
+	void ClearWaitingNpcs();
+	void AssignJobs();
 };

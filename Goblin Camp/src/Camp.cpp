@@ -21,7 +21,8 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 Camp* Camp::instance = 0;
 
 Camp::Camp() :
-	center(Coordinate(220,220)),
+	centerX(220.0),
+	centerY(220.0),
 	buildingCount(0)
 {}
 
@@ -31,12 +32,22 @@ Camp* Camp::Inst() {
 }
 
 Coordinate Camp::Center() {
-	return center;
+	return Coordinate((int)centerX, (int)centerY);
 }
 
-void Camp::UpdateCenter(Coordinate newBuilding) {
-	++buildingCount;
-	xAcc(newBuilding.X(),boost::accumulators::weight = 1);
-	yAcc(newBuilding.Y(),boost::accumulators::weight = 1);
-	center = Coordinate((int)boost::accumulators::mean(xAcc), (int)boost::accumulators::mean(yAcc));
+void Camp::UpdateCenter(Coordinate newBuilding, bool add) {
+	if(add) {
+		centerX = (centerX * buildingCount + newBuilding.X()) / (buildingCount + 1);
+		centerY = (centerY * buildingCount + newBuilding.Y()) / (buildingCount + 1);
+		++buildingCount;
+	} else {
+		if(buildingCount > 1) {
+			centerX = (centerX * buildingCount - newBuilding.X()) / (buildingCount - 1);
+			centerY = (centerY * buildingCount - newBuilding.Y()) / (buildingCount - 1);
+		} else {
+			centerX = 220.0;
+			centerY = 220.0;
+		}
+		--buildingCount;
+	}
 }
