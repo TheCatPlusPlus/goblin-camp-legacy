@@ -84,7 +84,7 @@ namespace Config {
 			("Center",        'c')
 			("Help",          'h')
 			("Pause",         ' ')
-			("Joblist",       'j')
+			("Jobs",          'j')
 		;
 		
 		atexit(_SaveNoThrow);

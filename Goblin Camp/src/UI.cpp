@@ -120,7 +120,7 @@ void UI::HandleKeyboard() {
 				Game::Inst()->Pause();
 			} else if (key.c == '.') {
 				Game::Inst()->CreateNPC(Coordinate(100,100), NPC::StringToNPCType("giant"));
-			} else if (key.c == keyMap["Joblist"]) { 
+			} else if (key.c == keyMap["Jobs"]) { 
 				ChangeMenu(JobDialog::JobListingDialog());
 			}
 

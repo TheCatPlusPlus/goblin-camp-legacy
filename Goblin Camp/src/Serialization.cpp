@@ -81,6 +81,9 @@ void Game::save(Archive & ar, const unsigned int version) const  {
 	ar & time;
 	ar & orcCount;
 	ar & goblinCount;
+	ar & safeMonths;
+	ar & marks;
+	ar & upleft;
 	ar & npcList;
 	ar & squadList;
 	ar & hostileSquadList;
@@ -88,12 +91,12 @@ void Game::save(Archive & ar, const unsigned int version) const  {
 	ar & dynamicConstructionList;
 	ar & itemList;
 	ar & freeItems;
+	ar & flyingItems;
+	ar & stoppedItems;
 	ar & natureList;
 	ar & waterList;
-	ar & upleft;
 	ar & filthList;
 	ar & bloodList;
-	ar & safeMonths;
 }
 
 template<class Archive>
@@ -108,6 +111,9 @@ void Game::load(Archive & ar, const unsigned int version) {
 	ar & time;
 	ar & orcCount;
 	ar & goblinCount;
+	ar & safeMonths;
+	ar & marks;
+	ar & upleft;
 	ar & npcList;
 	ar & squadList;
 	ar & hostileSquadList;
@@ -115,12 +121,12 @@ void Game::load(Archive & ar, const unsigned int version) {
 	ar & dynamicConstructionList;
 	ar & itemList;
 	ar & freeItems;
+	ar & flyingItems;
+	ar & stoppedItems;
 	ar & natureList;
 	ar & waterList;
-	ar & upleft;
 	ar & filthList;
 	ar & bloodList;
-	ar & safeMonths;
 }
 
 template<class Archive>
@@ -150,16 +156,24 @@ void NPC::save(Archive & ar, const unsigned int version) const {
 	ar & carried;
 	ar & mainHand;
 	ar & offHand;
+	ar & armor;
+	ar & quiver;
 	ar & thirst;
 	ar & hunger;
 	ar & weariness;
 	ar & thinkSpeed;
 	ar & statusEffects;
 	ar & health;
+	ar & maxHealth;
 	ar & foundItem;
 	ar & inventory;
 	ar & needsNutrition;
+	ar & needsSleep;
+	ar & hasHands;
 	ar & baseStats;
+	ar & effectiveStats;
+	ar & baseResistances;
+	ar & effectiveResistances;
 	ar & aggressive;
 	ar & coward;
 	ar & aggressor;
@@ -167,7 +181,7 @@ void NPC::save(Archive & ar, const unsigned int version) const {
 	ar & squad;
 	ar & attacks;
 	ar & escaped;
-	ar & hasHands;
+	ar & Skills;
 }
 
 template<class Archive>
@@ -197,16 +211,24 @@ void NPC::load(Archive & ar, const unsigned int version) {
 	ar & carried;
 	ar & mainHand;
 	ar & offHand;
+	ar & armor;
+	ar & quiver;
 	ar & thirst;
 	ar & hunger;
 	ar & weariness;
 	ar & thinkSpeed;
 	ar & statusEffects;
 	ar & health;
+	ar & maxHealth;
 	ar & foundItem;
 	ar & inventory;
 	ar & needsNutrition;
+	ar & needsSleep;
+	ar & hasHands;
 	ar & baseStats;
+	ar & effectiveStats;
+	ar & baseResistances;
+	ar & effectiveResistances;
 	ar & aggressive;
 	ar & coward;
 	ar & aggressor;
@@ -214,7 +236,7 @@ void NPC::load(Archive & ar, const unsigned int version) {
 	ar & squad;
 	ar & attacks;
 	ar & escaped;
-	ar & hasHands;
+	ar & Skills;
 	InitializeAIFunctions();
 }
 template<class Archive>
@@ -229,7 +251,10 @@ void Item::save(Archive & ar, const unsigned int version) const {
 	ar & flammable;
 	ar & attemptedStore;
 	ar & decayCounter;
+	ar & attack;
+	ar & resistances;
 	ar & container;
+	ar & internal;
 }
 
 template<class Archive>
@@ -244,7 +269,10 @@ void Item::load(Archive & ar, const unsigned int version) {
 	ar & flammable;
 	ar & attemptedStore;
 	ar & decayCounter;
+	ar & attack;
+	ar & resistances;
 	ar & container;
+	ar & internal;
 }
 
 template<class Archive>
@@ -354,6 +382,7 @@ void Container::save(Archive & ar, const unsigned int version) const {
 	ar & items;
 	ar & capacity;
 	ar & reservedSpace;
+	ar & listenersAsUids;
 }
 
 template<class Archive>
@@ -362,8 +391,8 @@ void Container::load(Archive & ar, const unsigned int version) {
 	ar & items;
 	ar & capacity;
 	ar & reservedSpace;
+	ar & listenersAsUids;
 }
-
 
 template<class Archive>
 void StatusEffect::save(Archive & ar, const unsigned int version) const {
@@ -376,6 +405,9 @@ void StatusEffect::save(Archive & ar, const unsigned int version) const {
 	ar & cooldown;
 	ar & cooldownDefault;
 	ar & statChanges;
+	ar & resistanceChanges;
+	ar & damage;
+	ar & bleed;
 }
 
 template<class Archive>
@@ -389,6 +421,9 @@ void StatusEffect::load(Archive & ar, const unsigned int version) {
 	ar & cooldown;
 	ar & cooldownDefault;
 	ar & statChanges;
+	ar & resistanceChanges;
+	ar & damage;
+	ar & bleed;
 }
 
 template<class Archive>
@@ -401,6 +436,7 @@ void Squad::save(Archive & ar, const unsigned int version) const {
 	ar & targetEntity;
 	ar & priority;
 	ar & weapon;
+	ar & armor;
 }
 
 template<class Archive>
@@ -413,6 +449,7 @@ void Squad::load(Archive & ar, const unsigned int version) {
 	ar & targetEntity;
 	ar & priority;
 	ar & weapon;
+	ar & armor;
 }
 
 template<class Archive>
@@ -421,6 +458,7 @@ void Task::save(Archive & ar, const unsigned int version) const {
 	ar & entity;
 	ar & action;
 	ar & item;
+	ar & flags;
 }
 template<class Archive>
 void Task::load(Archive & ar, const unsigned int version) {
@@ -428,6 +466,7 @@ void Task::load(Archive & ar, const unsigned int version) {
 	ar & entity;
 	ar & action;
 	ar & item;
+	ar & flags;
 }
 
 
@@ -480,6 +519,7 @@ void Construction::save(Archive & ar, const unsigned int version) const {
 	ar & materialsUsed;
 	ar & stockpile;
 	ar & farmplot;
+	ar & dismantle;
 	ar & time;
 	ar & AllowedAmount;
 	ar & built;
@@ -505,8 +545,10 @@ void Construction::load(Archive & ar, const unsigned int version) {
 	ar & materialsUsed;
 	ar & stockpile;
 	ar & farmplot;
+	ar & dismantle;
 	ar & time;
 	ar & AllowedAmount;
+	ar & built;
 }
 
 template<class Archive>
@@ -627,12 +669,16 @@ template<class Archive>
 void JobManager::save(Archive & ar, const unsigned int version) const {
 	ar & availableList;
 	ar & waitingList;
+	ar & menialNPCsWaiting;
+	ar & expertNPCsWaiting;
 }
 
 template<class Archive>
 void JobManager::load(Archive & ar, const unsigned int version) {
 	ar & availableList;
 	ar & waitingList;
+	ar & menialNPCsWaiting;
+	ar & expertNPCsWaiting;
 }
 
 template<class Archive>
@@ -661,6 +707,8 @@ void StockManager::save(Archive & ar, const unsigned int version) const {
 	ar & fromEarth;
 	ar & designatedTrees;
 	ar & treeFellingJobs;
+	ar & designatedBog;
+	ar & bogIronJobs;
 }
 
 template<class Archive>
@@ -675,6 +723,8 @@ void StockManager::load(Archive & ar, const unsigned int version) {
 	ar & fromEarth;
 	ar & designatedTrees;
 	ar & treeFellingJobs;
+	ar & designatedBog;
+	ar & bogIronJobs;
 }
 
 template<class Archive>
@@ -722,6 +772,7 @@ void Tile::save(Archive & ar, const unsigned int version) const {
 	ar & itemList;
 	ar & filth;
 	ar & blood;
+	ar & marked;
 }
 
 template<class Archive>
@@ -747,6 +798,7 @@ void Tile::load(Archive & ar, const unsigned int version) {
 	ar & itemList;
 	ar & filth;
 	ar & blood;
+	ar & marked;
 }
 
 void Game::SaveGame(std::string filename) {
@@ -769,6 +821,7 @@ void Game::LoadGame(std::string filename) {
 	iarch>>*Camp::Inst();
 	iarch>>*StockManager::Inst();
 	iarch>>*Map::Inst();
+	Game::Inst()->TranslateContainerListeners();
 }
 
 template<class Archive>
@@ -813,5 +866,14 @@ void Attack::load(Archive & ar, const unsigned int version) {
 	ar & projectile;
 }
 
+template<class Archive>
+void SkillSet::save(Archive & ar, const unsigned int version) const {
+	ar & skills;
+}
+
+template<class Archive>
+void SkillSet::load(Archive & ar, const unsigned int version) {
+	ar & skills;
+}
 
 #pragma warning(pop)

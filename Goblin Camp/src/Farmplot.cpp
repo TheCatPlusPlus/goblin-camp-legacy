@@ -107,29 +107,31 @@ int FarmPlot::Use() {
 		bool seedsLeft = true;
 		std::map<Coordinate, boost::shared_ptr<Container> >::iterator containerIt = containers.begin();
 		while (seedsLeft && containerIt != containers.end()) {
-			while (!containerIt->second->empty() && !reserved[containerIt->first]) {
+			while (!containerIt->second->empty() || reserved[containerIt->first]) {
 				++containerIt;
 				if (containerIt == containers.end()) return 100;
 			}
 			seedsLeft = false;
-			for (std::map<ItemType, bool>::iterator seedi = allowedSeeds.begin(); seedi != allowedSeeds.end(); ++seedi) {
-				growth[containerIt->first] = -(MONTH_LENGTH / 2) + rand() % (MONTH_LENGTH);
-				if (seedi->second) {
-					boost::weak_ptr<Item> seed = Game::Inst()->FindItemByTypeFromStockpiles(seedi->first, Center());
-					if (seed.lock()) {
-						boost::shared_ptr<Job> plantJob(new Job("Plant " + Item::ItemTypeToString(seedi->first)));
-						plantJob->ReserveEntity(seed);
-						plantJob->ReserveSpot(boost::static_pointer_cast<Stockpile>(shared_from_this()), containerIt->first);
-						plantJob->tasks.push_back(Task(MOVE, seed.lock()->Position()));
-						plantJob->tasks.push_back(Task(TAKE, seed.lock()->Position(), seed));
-						plantJob->tasks.push_back(Task(MOVE, containerIt->first));
-						plantJob->tasks.push_back(Task(PUTIN, containerIt->first, containerIt->second));
-						JobManager::Inst()->AddJob(plantJob);
-						++containerIt;
-						seedsLeft = true;
+			if (containerIt->first.X() >= 0 && containerIt->first.Y() >= 0 && containerIt->second) {
+				for (std::map<ItemType, bool>::iterator seedi = allowedSeeds.begin(); seedi != allowedSeeds.end(); ++seedi) {
+					growth[containerIt->first] = -(MONTH_LENGTH / 2) + rand() % (MONTH_LENGTH);
+					if (seedi->second) {
+						boost::weak_ptr<Item> seed = Game::Inst()->FindItemByTypeFromStockpiles(seedi->first, Center());
+						if (seed.lock()) {
+							boost::shared_ptr<Job> plantJob(new Job("Plant " + Item::ItemTypeToString(seedi->first)));
+							plantJob->ReserveEntity(seed);
+							plantJob->ReserveSpot(boost::static_pointer_cast<Stockpile>(shared_from_this()), containerIt->first);
+							plantJob->tasks.push_back(Task(MOVE, seed.lock()->Position()));
+							plantJob->tasks.push_back(Task(TAKE, seed.lock()->Position(), seed));
+							plantJob->tasks.push_back(Task(MOVE, containerIt->first));
+							plantJob->tasks.push_back(Task(PUTIN, containerIt->first, containerIt->second));
+							JobManager::Inst()->AddJob(plantJob);
+							seedsLeft = true;
+							break; //Break out of for-loop, we found a seed to plant
+						}
 					}
 				}
-			}
+			} else { return 100; } //Container invalid 
 		}
 		return 100;
 	}
