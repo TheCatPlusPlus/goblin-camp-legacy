@@ -14,6 +14,7 @@ construction_type "Farm plot" {
 	graphicLength=1
 	graphic=[126]
 	maxCondition=10
+	tileReqs=["grass"]
 }
 
 construction_type "Wooden Wall" {
@@ -130,6 +131,7 @@ construction_type "Stone quarry" {
 	//Spawn creatures every x seconds
 	spawnFrequency=600
 	permanent
+	tileReqs=["rock"]
 }
 
 construction_type "Stone mason" {
@@ -284,4 +286,16 @@ construction_type "Totem Pole" {
 	graphic=[201, 205, 187,
 			 186,  10, 186,
 			 200, 205, 188]
+}
+
+construction_type "Pontoon bridge" {
+	category="Basics"
+	bridge
+	walkable
+	maxCondition=50
+	materials=["Barrel", "Barrel", "Barrel", "Barrel", "Plank", "Plank", "Plank", "Plank"]
+	graphicLength=2
+	graphic=[157, 157,
+			 157, 157]
+	tileReqs=["grass", "rock", "ditch", "river"]
 }

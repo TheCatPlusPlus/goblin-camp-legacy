@@ -39,6 +39,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 // Contructions parser
 //
 class ConstructionListener : public ITCODParserListener {
+
 	bool parserNewStruct(TCODParser *parser,const TCODParserStruct *str,const char *name) {
 #ifdef DEBUG
 		std::cout<<(boost::format("new %s structure: '%s'\n") % str->getName() % name).str();
@@ -48,7 +49,7 @@ class ConstructionListener : public ITCODParserListener {
 		Construction::AllowedAmount.push_back(-1);
 		return true;
 	}
-	
+
 	bool parserFlag(TCODParser *parser,const char *name) {
 #ifdef DEBUG
 		std::cout<<(boost::format("%s\n") % name).str();
@@ -85,10 +86,12 @@ class ConstructionListener : public ITCODParserListener {
 		} else if (boost::iequals(name, "spawningPool")) {
 			Construction::Presets.back().tags[SPAWNINGPOOL] = true;
 			Construction::Presets.back().dynamic = true;
+		} else if (boost::iequals(name, "bridge")) {
+			Construction::Presets.back().tags[BRIDGE] = true;
 		}
 		return true;
 	}
-	
+
 	bool parserProperty(TCODParser *parser,const char *name, TCOD_value_type_t type, TCOD_value_t value) {
 #ifdef DEBUG
 		std::cout<<(boost::format("%s\n") % name).str();
@@ -126,22 +129,32 @@ class ConstructionListener : public ITCODParserListener {
 			Construction::Presets.back().spawnFrequency = value.i * UPDATES_PER_SECOND;
 		} else if (boost::iequals(name, "color")) {
 			Construction::Presets.back().color = value.col;
+		} else if (boost::iequals(name, "tileReqs")) {
+			for (int i = 0; i < TCOD_list_size(value.list); ++i) {
+				Construction::Presets.back().tileReqs.insert(Tile::StringToTileType((char*)TCOD_list_get(value.list,i)));
+#ifdef DEBUG
+				std::cout<<"("<<Construction::Presets.back().name<<") Adding tile req "<<(char*)TCOD_list_get(value.list,i)<<"\n";
+#endif
+			}
 		}
-		
+
 		return true;
 	}
-	
+
 	bool parserEndStruct(TCODParser *parser,const TCODParserStruct *str,const char *name) {
 #ifdef DEBUG
 		std::cout<<(boost::format("end of %s structure\n") % name).str();
 #endif
 		Construction::Presets.back().blueprint = Coordinate(Construction::Presets.back().graphic[0],
 			(Construction::Presets.back().graphic.size()-1)/Construction::Presets.back().graphic[0]);
+		if (Construction::Presets.back().tileReqs.empty()) {
+			Construction::Presets.back().tileReqs.insert(TILEGRASS);
+			Construction::Presets.back().tileReqs.insert(TILEROCK);
+		}
 		return true;
 	}
-	
 	void error(const char *msg) {
-		LOG("ConstructionListener: " << msg);
+		LOG("ItemListener: " << msg);
 		Game::Inst()->ErrorScreen();
 	}
 };
@@ -172,6 +185,8 @@ void Construction::LoadPresets(std::string filename) {
 	constructionTypeStruct->addFlag("unique");
 	constructionTypeStruct->addFlag("centersCamp");
 	constructionTypeStruct->addFlag("spawningPool");
+	constructionTypeStruct->addListProperty("tileReqs", TCOD_TYPE_STRING, false);
+	constructionTypeStruct->addFlag("bridge");
 	
 	parser.run(filename.c_str(), new ConstructionListener());
 }
@@ -368,6 +383,7 @@ void NPC::LoadPresets(std::string filename) {
 // NatureObjects parser
 //
 class NatureObjectListener : public ITCODParserListener {
+
 	bool parserNewStruct(TCODParser *parser,const TCODParserStruct *str,const char *name) {
 #ifdef DEBUG
 		std::cout<<(boost::format("new %s structure: '%s'\n") % str->getName() % name).str();
@@ -376,7 +392,7 @@ class NatureObjectListener : public ITCODParserListener {
 		NatureObject::Presets.back().name = name;
 		return true;
 	}
-	
+
 	bool parserFlag(TCODParser *parser,const char *name) {
 #ifdef DEBUG
 		std::cout<<(boost::format("%s\n") % name).str();
@@ -387,10 +403,12 @@ class NatureObjectListener : public ITCODParserListener {
 			NatureObject::Presets.back().harvestable = true;
 		} else if (boost::iequals(name, "tree")) {
 			NatureObject::Presets.back().tree = true;
+		} else if (boost::iequals(name, "evil")) {
+			NatureObject::Presets.back().evil = true;
 		}
 		return true;
 	}
-	
+
 	bool parserProperty(TCODParser *parser,const char *name, TCOD_value_type_t type, TCOD_value_t value) {
 #ifdef DEBUG
 		std::cout<<(boost::format("%s\n") % name).str();
@@ -416,7 +434,7 @@ class NatureObjectListener : public ITCODParserListener {
 		}
 		return true;
 	}
-	
+
 	bool parserEndStruct(TCODParser *parser,const TCODParserStruct *str,const char *name) {
 #ifdef DEBUG
 		std::cout<<(boost::format("end of %s structure\n") % name).str();
@@ -443,7 +461,8 @@ void NatureObject::LoadPresets(std::string filename) {
 	natureObjectTypeStruct->addFlag("walkable");
 	natureObjectTypeStruct->addProperty("minheight", TCOD_TYPE_FLOAT, false);
 	natureObjectTypeStruct->addProperty("maxheight", TCOD_TYPE_FLOAT, false);
-	
+	natureObjectTypeStruct->addFlag("evil");
+
 	parser.run(filename.c_str(), new NatureObjectListener());
 }
 

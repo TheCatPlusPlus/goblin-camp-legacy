@@ -85,5 +85,7 @@ public:
 	float GetWaterlevel();
 	void WalkOver(int,int);
 	void Naturify(int,int);
-	void Corrupt(int x, int y, int magnitude);
+	void Corrupt(int x, int y, int magnitude=200);
+	void Corrupt(Coordinate, int magnitude=200);
+	int GetCorruption(int x, int y);
 };

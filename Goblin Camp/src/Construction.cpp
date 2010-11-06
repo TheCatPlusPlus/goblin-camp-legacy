@@ -496,6 +496,8 @@ bool Construction::CheckMaterialsPresent() {
 
 bool Construction::DismantlingOrdered() { return dismantle; }
 
+bool Construction::Built() { return built; }
+
 ConstructionPreset::ConstructionPreset() :
 	maxCondition(0),
 	graphic(std::vector<int>()),
@@ -512,7 +514,8 @@ ConstructionPreset::ConstructionPreset() :
 	placementType(UIPLACEMENT),
 	blocksLight(true),
 	permanent(false),
-	color(TCODColor::black)
+	color(TCODColor::black),
+	tileReqs(std::set<TileType>())
 {
 	for (int i = 0; i < TAGCOUNT; ++i) { tags[i] = false; }
 }

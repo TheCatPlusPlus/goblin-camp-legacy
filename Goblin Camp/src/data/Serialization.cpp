@@ -888,6 +888,8 @@ void Camp::save(Archive & ar, const unsigned int version) const {
 	ar & buildingCount;
 	ar & locked;
 	ar & lockedCenter;
+	ar & tier;
+	ar & name;
 }
 
 template<class Archive>
@@ -899,6 +901,8 @@ void Camp::load(Archive & ar, const unsigned int version) {
 		ar & buildingCount;
 		ar & locked;
 		ar & lockedCenter;
+		ar & tier;
+		ar & name;
 	}
 }
 
@@ -990,6 +994,9 @@ void Tile::save(Archive & ar, const unsigned int version) const {
 	ar & foreColor.r;
 	ar & foreColor.g;
 	ar & foreColor.b;
+	ar & originalForeColor.r;
+	ar & originalForeColor.g;
+	ar & originalForeColor.b;
 	ar & backColor.r;
 	ar & backColor.g;
 	ar & backColor.b;
@@ -999,6 +1006,8 @@ void Tile::save(Archive & ar, const unsigned int version) const {
 	ar & filth;
 	ar & blood;
 	ar & marked;
+	ar & walkedOver;
+	ar & corruption;
 }
 
 template<class Archive>
@@ -1017,6 +1026,9 @@ void Tile::load(Archive & ar, const unsigned int version) {
 		ar & foreColor.r;
 		ar & foreColor.g;
 		ar & foreColor.b;
+		ar & originalForeColor.r;
+		ar & originalForeColor.g;
+		ar & originalForeColor.b;
 		ar & backColor.r;
 		ar & backColor.g;
 		ar & backColor.b;
@@ -1026,6 +1038,8 @@ void Tile::load(Archive & ar, const unsigned int version) {
 		ar & filth;
 		ar & blood;
 		ar & marked;
+		ar & walkedOver;
+		ar & corruption;
 	}
 }
 

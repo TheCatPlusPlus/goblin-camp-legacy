@@ -309,7 +309,8 @@ void NPC::Update() {
 	}
 
 	if (boost::shared_ptr<WaterNode> water = Map::Inst()->GetWater(x,y).lock()) {
-		if (water->Depth() > WALKABLE_WATER_DEPTH) {
+		boost::shared_ptr<Construction> construct = Game::Inst()->GetConstruction(Map::Inst()->GetConstruction(x,y)).lock();
+		if (water->Depth() > WALKABLE_WATER_DEPTH && (!construct || !construct->HasTag(BRIDGE) || !construct->Built())) {
 			AddEffect(SWIM);
 		} else { RemoveEffect(SWIM); }
 	} else { RemoveEffect(SWIM); }
@@ -650,8 +651,6 @@ MOVENEARend:
 								Game::Inst()->CreateItem(tree->Position(), *iti, true);
 							}
 						}
-						Map::Inst()->SetWalkable(tree->X(), tree->Y(), true);
-						Map::Inst()->Buildable(tree->X(), tree->Y(), true);
 						Game::Inst()->RemoveNatureObject(tree);
 						TaskFinished(TASKSUCCESS);
 						break;
@@ -659,7 +658,7 @@ MOVENEARend:
 					//Job underway
 					break;
 				}
-				TaskFinished(TASKFAILFATAL);
+				TaskFinished(TASKFAILFATAL, "(FELL FAIL) No NatureObject to fell");
 				break;
 
 			case HARVESTWILDPLANT:
@@ -679,8 +678,6 @@ MOVENEARend:
 								Game::Inst()->CreateItem(plant->Position(), *iti, true);
 							}
 						}
-						Map::Inst()->SetWalkable(plant->X(), plant->Y(), true);
-						Map::Inst()->Buildable(plant->X(), plant->Y(), true);
 						Game::Inst()->RemoveNatureObject(plant);
 						TaskFinished(TASKSUCCESS);
 						break;
@@ -878,7 +875,7 @@ MOVENEARend:
 				break;
 
 			case FILL:
-				if (carried.lock() && carried.lock()->IsCategory(Item::StringToItemCategory("Liquid container"))) {
+				if (carried.lock() && carried.lock()->IsCategory(Item::StringToItemCategory("Barrel"))) {
 					boost::shared_ptr<Container> cont(boost::static_pointer_cast<Container>(carried.lock()));
 					
 					if (!cont->empty() && cont->ContainsWater() == 0 && cont->ContainsFilth() == 0) {
@@ -1686,8 +1683,8 @@ void NPC::UpdateVelocity() {
 	} else { //We're not hurtling through air so let's tumble around if we're stuck on unwalkable terrain
 		if (!Map::Inst()->Walkable(x, y, (void*)this)) {
 			for (int radius = 1; radius < 10; ++radius) {
-				for (int xi = x - radius; xi <= x + radius; ++xi) {
-					for (int yi = y - radius; yi <= y + radius; ++yi) {
+				for (unsigned int xi = x - radius; xi <= x + radius; ++xi) {
+					for (unsigned int yi = y - radius; yi <= y + radius; ++yi) {
 						if (Map::Inst()->Walkable(xi, yi, (void*)this)) {
 							Position(Coordinate(xi, yi));
 							return;

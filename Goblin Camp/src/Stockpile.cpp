@@ -42,6 +42,20 @@ Stockpile::Stockpile(ConstructionType type, int newSymbol, Coordinate target) :
 }
 
 Stockpile::~Stockpile() {
+	//Loop through all the containers
+	for (std::map<Coordinate, boost::shared_ptr<Container> >::iterator conti = containers.begin(); conti != containers.end(); ++conti) {
+		//Loop through all the items in the containers
+		for (std::set<boost::weak_ptr<Item> >::iterator itemi = conti->second->begin(); itemi != conti->second->end(); ++itemi) {
+			//If the item is also a container, remove 'this' as a listener
+			if (itemi->lock() && itemi->lock()->IsCategory(Item::StringToItemCategory("Container"))) {
+				if (boost::dynamic_pointer_cast<Container>(itemi->lock())) {
+					boost::shared_ptr<Container> container = boost::static_pointer_cast<Container>(itemi->lock());
+					container->RemoveListener(this);
+				}
+			}
+		}
+	}
+
 	for (int x = a.X(); x <= b.X(); ++x) {
 		for (int y = a.Y(); y <= b.Y(); ++y) {
 			if (Map::Inst()->GetConstruction(x,y) == uid) {
@@ -160,7 +174,8 @@ void Stockpile::Expand(Coordinate from, Coordinate to) {
 	for (int repeatCount = 0; repeatCount <= repeats; ++repeatCount) {
 		for (int ix = from.X(); ix <= to.X(); ++ix) {
 			for (int iy = from.Y(); iy <= to.Y(); ++iy) {
-				if (Map::Inst()->GetConstruction(ix,iy) == -1 && Map::Inst()->Buildable(ix,iy)) {
+				if (Map::Inst()->GetConstruction(ix,iy) == -1 && Map::Inst()->Buildable(ix,iy) &&
+					Construction::Presets[type].tileReqs.find(Map::Inst()->Type(ix,iy)) != Construction::Presets[type].tileReqs.end()) {
 					if (Map::Inst()->GetConstruction(ix-1,iy) == uid ||
 						Map::Inst()->GetConstruction(ix+1,iy) == uid ||
 						Map::Inst()->GetConstruction(ix,iy-1) == uid ||
@@ -201,7 +216,7 @@ void Stockpile::Draw(Coordinate upleft, TCODConsole* console) {
 						if (!containers[Coordinate(x,y)]->empty()) {
 							boost::weak_ptr<Item> item = *containers[Coordinate(x,y)]->begin();
 							if (item.lock()) {
-								console->putCharEx(screenx, screeny, item.lock()->Graphic(), item.lock()->Color(), dismantle ? TCODColor::darkGrey : TCODColor::black);
+								item.lock()->Draw(upleft, console);
 							}
 						}
 				}
@@ -227,7 +242,7 @@ bool Stockpile::Full(ItemType type) {
 		for (int iy = a.Y(); iy <= b.Y(); ++iy) {
 			if (Map::Inst()->GetConstruction(ix,iy) == uid) {
 				//If theres a free space then it obviously is not full
-				if (containers[Coordinate(ix,iy)]->empty()) return false;
+				if (containers[Coordinate(ix,iy)]->empty() && !reserved[Coordinate(ix,iy)]) return false;
 
 				//Check if a container exists for this ItemCategory that isn't full
 				boost::weak_ptr<Item> item = containers[Coordinate(ix,iy)]->GetFirstItem();
@@ -242,6 +257,12 @@ bool Stockpile::Full(ItemType type) {
 }
 
 Coordinate Stockpile::FreePosition() {
+	//First attempt to find a random position
+	for (int i = 0; i < std::max(1, (signed int)containers.size()/4); ++i) {
+		std::map<Coordinate, boost::shared_ptr<Container> >::iterator conti = boost::next(containers.begin(), rand() % containers.size());
+		if (conti->second->empty() && !reserved[conti->first]) return conti->first;
+	}
+	//If that fails still iterate through each position because a free position _should_ exist
 	for (int ix = a.X(); ix <= b.X(); ++ix) {
 		for (int iy = a.Y(); iy <= b.Y(); ++iy) {
 			if (Map::Inst()->GetConstruction(ix,iy) == uid) {

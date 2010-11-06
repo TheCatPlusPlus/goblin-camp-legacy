@@ -141,7 +141,7 @@ public:
 	void PeacefulFaunaCount(int);
 
 	/*      CONSTRUCTIONS       CONSTRUCTIONS       CONSTRUCTIONS       */
-	static bool CheckPlacement(Coordinate, Coordinate);
+	static bool CheckPlacement(Coordinate, Coordinate, std::set<TileType> = std::set<TileType>());
 	static int PlaceConstruction(Coordinate, ConstructionType);
 	static void DismantleConstruction(Coordinate, Coordinate);
 	void RemoveConstruction(boost::weak_ptr<Construction>);
@@ -185,6 +185,7 @@ public:
 	static void FellTree(Coordinate, Coordinate);
 	static void DesignateTree(Coordinate, Coordinate);
 	void RemoveNatureObject(boost::weak_ptr<NatureObject>);
+	void RemoveNatureObject(Coordinate, Coordinate);
 	static void HarvestWildPlant(Coordinate, Coordinate);
 	static void DesignateBog(Coordinate, Coordinate);
 	static bool CheckTileType(TileType, Coordinate, Coordinate);
@@ -192,6 +193,7 @@ public:
 	Coordinate FindClosestAdjacent(Coordinate, Coordinate);
 	bool Adjacent(Coordinate, Coordinate);
 	void CreateNatureObject(Coordinate);
+	void CreateNatureObject(Coordinate, std::string);
 
 	Season CurrentSeason();
 	std::string SeasonToString(Season);

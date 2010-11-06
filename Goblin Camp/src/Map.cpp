@@ -257,7 +257,9 @@ int Map::GetMoveModifier(int x, int y) {
 	if (tileMap[x][y].type() == TILEBOG) modifier += 10;
 	else if (tileMap[x][y].type() == TILEDITCH) modifier += 4;
 	if (boost::shared_ptr<WaterNode> water = tileMap[x][y].GetWater().lock()) {
-		modifier += water->Depth();
+		if (tileMap[x][y].construction < 0 || (Game::Inst()->GetConstruction(tileMap[x][y].construction).lock() &&
+			Game::Inst()->GetConstruction(tileMap[x][y].construction).lock()->Built() &&
+			!Game::Inst()->GetConstruction(tileMap[x][y].construction).lock()->HasTag(BRIDGE))) modifier += water->Depth();
 	}
 	return modifier;
 }
@@ -267,25 +269,52 @@ float Map::GetWaterlevel() { return waterlevel; }
 bool Map::GroundMarked(int x, int y) { return tileMap[x][y].marked; }
 
 void Map::WalkOver(int x, int y) { if (x >= 0 && x < width && y >= 0 && y < height) tileMap[x][y].WalkOver(); }
-void Map::Corrupt(int x, int y, int magnitude) { if (x >= 0 && x < width && y >= 0 && y < height) tileMap[x][y].Corrupt(magnitude); }
+void Map::Corrupt(int x, int y, int magnitude) { 
+	if (x >= 0 && x < width && y >= 0 && y < height) {
+		tileMap[x][y].Corrupt(magnitude);
+		if (tileMap[x][y].corruption >= 100) {
+			if (tileMap[x][y].natureObject >= 0 && 
+				!NatureObject::Presets[Game::Inst()->natureList[tileMap[x][y].natureObject]->Type()].evil &&
+				!boost::iequals(Game::Inst()->natureList[tileMap[x][y].natureObject]->Name(),"Withering tree")) {
+					bool createTree = Game::Inst()->natureList[tileMap[x][y].natureObject]->Tree();
+					Game::Inst()->RemoveNatureObject(Game::Inst()->natureList[tileMap[x][y].natureObject]);
+					if (createTree && rand() % 4 < 3) Game::Inst()->CreateNatureObject(Coordinate(x,y), "Withering tree");
+			}
+		}
+		if (tileMap[x][y].corruption > 300) {
+			tileMap[x][y].Corrupt(-40);
+			Corrupt(x-1, y, 10);
+			Corrupt(x+1, y, 10);
+			Corrupt(x, y-1, 10);
+			Corrupt(x, y+1, 10);
+		}
+	}
+}
 
 void Map::Naturify(int x, int y) {
 	if (x >= 0 && x < width && y >= 0 && y < height) {
 		if (tileMap[x][y].walkedOver > 0) --tileMap[x][y].walkedOver;
-		if (tileMap[x][y].walkedOver == 0 && tileMap[x][y].natureObject < 0) {
+		if (tileMap[x][y].walkedOver == 0 && tileMap[x][y].natureObject < 0 && tileMap[x][y].construction < 0) {
 			int natureObjects = 0;
-			int beginx = std::max(0, x-1);
-			int endx = std::min(width-1, x+1);
-			int beginy = std::max(0, y-1);
-			int endy = std::min(height-1, y+1);
+			int beginx = std::max(0, x-2);
+			int endx = std::min(width-2, x+2);
+			int beginy = std::max(0, y-2);
+			int endy = std::min(height-2, y+2);
 			for (int ix = beginx; ix <= endx; ++ix) {
 				for (int iy = beginy; iy <= endy; ++iy) {
 					if (tileMap[ix][iy].natureObject >= 0) ++natureObjects;
 				}
 			}
-			if (natureObjects < 2) {
+			if (natureObjects < (tileMap[x][y].corruption < 100 ? 5 : 1)) { //Corrupted areas have less flora
 				Game::Inst()->CreateNatureObject(Coordinate(x,y));
 			}
-		}
+		} 
 	}
+}
+
+void Map::Corrupt(Coordinate location, int magnitude) { Corrupt(location.X(), location.Y(), magnitude); }
+
+int Map::GetCorruption(int x, int y) { 
+	if (x >= 0 && x < width && y >= 0 && y < height) return tileMap[x][y].corruption;
+	return 0;
 }

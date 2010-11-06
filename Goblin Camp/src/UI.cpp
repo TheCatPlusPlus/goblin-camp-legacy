@@ -64,7 +64,7 @@ menuOpen(false),
 {
 	currentMenu = Menu::MainMenu();
 	menuHistory.reserve(10);
-	placementCallback = boost::bind(Game::CheckPlacement, _1, _2);
+	placementCallback = boost::bind(Game::CheckPlacement, _1, _2, std::set<TileType>());
 	callback = boost::bind(Game::PlaceConstruction, _1, 0);
 	rectCallback = boost::bind(Game::PlaceStockpile, _1, _2, 0, 0);
 	mouseInput = TCODMouse::getStatus();
@@ -582,8 +582,9 @@ int UI::DrawShortcutHelp(TCODConsole *console, int x, int y, std::string shortcu
 void UI::DrawTopBar(TCODConsole* console) {
 	console->setAlignment(TCOD_CENTER);
 	console->setDefaultForeground(TCODColor::white);
-	console->print(console->getWidth() / 2, 0, "Orcs: %d   Goblins: %d  -  %s", Game::Inst()->OrcCount(),
-		Game::Inst()->GoblinCount(), Game::Inst()->SeasonToString(Game::Inst()->CurrentSeason()).c_str());
+	console->print(console->getWidth() / 2, 0, "%s  -  Orcs: %d   Goblins: %d  -  %s", Camp::Inst()->GetName().c_str(),
+		Game::Inst()->OrcCount(), Game::Inst()->GoblinCount(), 
+		Game::Inst()->SeasonToString(Game::Inst()->CurrentSeason()).c_str());
 
 	if (Game::Inst()->Paused()) {
 		console->setDefaultForeground(TCODColor::red);
@@ -640,7 +641,7 @@ void UI::SetPlacementCallback(boost::function<bool(Coordinate,Coordinate)> newCa
 
 void UI::ChooseConstruct(ConstructionType construct, UIState state) {
 	UI::Inst()->SetCallback(boost::bind(Game::PlaceConstruction, _1, construct));
-	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, _2));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, _2, Construction::Presets[construct].tileReqs));
 	UI::Inst()->blueprint(Construction::Blueprint(construct));
 	UI::Inst()->state(state);
 	UI::Inst()->SetCursor('C');
@@ -649,7 +650,7 @@ void UI::ChooseConstruct(ConstructionType construct, UIState state) {
 void UI::ChooseStockpile(ConstructionType stockpile) {
 	int stockpileSymbol = '%';
 	UI::Inst()->SetRectCallback(boost::bind(Game::PlaceStockpile, _1, _2, stockpile, stockpileSymbol));
-	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, _2));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, _2, Construction::Presets[stockpile].tileReqs));
 	UI::Inst()->blueprint(Construction::Blueprint(stockpile));
 	UI::Inst()->state(UIRECTPLACEMENT);
 	UI::Inst()->SetCursor('=');
@@ -674,7 +675,7 @@ void UI::ChoosePlantHarvest() {
 void UI::ChooseOrderTargetCoordinate(boost::shared_ptr<Squad> squad) {
 	UI::Inst()->state(UIPLACEMENT);
 	UI::Inst()->SetCallback(boost::bind(Game::SetSquadTargetCoordinate, _1, squad));
-	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, Coordinate(1,1)));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckTree, _1, Coordinate(1,1)));
 	UI::Inst()->blueprint(Coordinate(1,1));
 	UI::Inst()->SetCursor('X');
 }
@@ -682,7 +683,7 @@ void UI::ChooseOrderTargetCoordinate(boost::shared_ptr<Squad> squad) {
 void UI::ChooseOrderTargetEntity(boost::shared_ptr<Squad> squad) {
 	UI::Inst()->state(UIPLACEMENT);
 	UI::Inst()->SetCallback(boost::bind(Game::SetSquadTargetEntity, _1, squad));
-	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, Coordinate(1,1)));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckTree, _1, Coordinate(1,1)));
 	UI::Inst()->blueprint(Coordinate(1,1));
 	UI::Inst()->SetCursor('X');
 }
@@ -805,7 +806,7 @@ void UI::ChooseCreateNPC() {
 	int npc;
 	Menu *NPCChoiceMenu = new Menu(std::vector<MenuChoice>(), "NPC");
 	NPCChoiceMenu->AddChoice(MenuChoice("None", boost::lambda::var(npc) = -1));
-	for (int i = 0; i < NPC::Presets.size(); ++i) {
+	for (unsigned int i = 0; i < NPC::Presets.size(); ++i) {
 		NPCChoiceMenu->AddChoice(MenuChoice(NPC::Presets[i].name, boost::lambda::var(npc) = i));
 	}
 	NPCChoiceMenu->ShowModal();
@@ -822,7 +823,7 @@ void UI::ChooseCreateNPC() {
 void UI::ChooseCreateItem() {
 	int item, category;
 	Menu *ItemCategoryMenu = new Menu(std::vector<MenuChoice>(), "Categories");
-	for (int i = 0; i < Item::Categories.size(); ++i) {
+	for (unsigned int i = 0; i < Item::Categories.size(); ++i) {
 		if (!Item::Categories[i].parent)
 			ItemCategoryMenu->AddChoice(MenuChoice(Item::Categories[i].name, boost::lambda::var(category) = i));
 	}
@@ -830,7 +831,7 @@ void UI::ChooseCreateItem() {
 
 	Menu *ItemChoiceMenu = new Menu(std::vector<MenuChoice>(), "Item");
 	ItemChoiceMenu->AddChoice(MenuChoice("None", boost::lambda::var(item) = -1));
-	for (int i = 0; i < Item::Presets.size(); ++i) {
+	for (unsigned int i = 0; i < Item::Presets.size(); ++i) {
 		if (Item::Presets[i].categories.find(category) != Item::Presets[i].categories.end())
 			ItemChoiceMenu->AddChoice(MenuChoice(Item::Presets[i].name, boost::lambda::var(item) = i));
 	}
@@ -850,7 +851,7 @@ void UI::ChooseCreateItem() {
 void UI::ChooseDig() {
 	UI::Inst()->state(UIRECTPLACEMENT);
 	UI::Inst()->SetRectCallback(boost::bind(Game::Dig, _1, _2));
-	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, _2));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckPlacement, _1, _2, std::set<TileType>()));
 	UI::Inst()->blueprint(Coordinate(1,1));
 	UI::Inst()->SetCursor('_');
 }
@@ -869,4 +870,26 @@ void UI::ChooseCreateWater() {
 	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckTree, _1, Coordinate(1,1)));
 	UI::Inst()->blueprint(Coordinate(1,1));
 	UI::Inst()->SetCursor('~');
+}
+
+void UI::ChooseCorrupt() {
+	UI::Inst()->state(UIPLACEMENT);
+	UI::Inst()->SetCallback(boost::bind(&Map::Corrupt, Map::Inst(), _1, 2000));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckTree, _1, Coordinate(1,1)));
+	UI::Inst()->blueprint(Coordinate(1,1));
+	UI::Inst()->SetCursor('c');
+}
+
+void UI::ChooseNaturify() {
+	for (int i = 0; i < 10000; ++i) {
+		Map::Inst()->Naturify(rand() % Map::Inst()->Width(), rand() % Map::Inst()->Height());
+	}
+}
+
+void UI::ChooseRemoveNatureObjects() {
+	UI::Inst()->state(UIRECTPLACEMENT);
+	UI::Inst()->SetRectCallback(boost::bind(&Game::RemoveNatureObject, Game::Inst(), _1, _2));
+	UI::Inst()->SetPlacementCallback(boost::bind(Game::CheckTree, _1, _2));
+	UI::Inst()->blueprint(Coordinate(1,1));
+	UI::Inst()->SetCursor('R');
 }

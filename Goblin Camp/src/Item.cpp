@@ -78,7 +78,7 @@ Item::~Item() {
 void Item::Draw(Coordinate upleft, TCODConsole* console) {
 	int screenx = x - upleft.X();
 	int screeny = y - upleft.Y();
-	if (!container.lock() && screenx >= 0 && screenx < console->getWidth() && screeny >= 0 && screeny < console->getHeight()) {
+	if (screenx >= 0 && screenx < console->getWidth() && screeny >= 0 && screeny < console->getHeight()) {
 		console->putCharEx(screenx, screeny, graphic, color, Map::Inst()->BackColor(x,y));
 	}
 }
@@ -178,8 +178,8 @@ void Item::SetVelocity(int speed) {
 		Game::Inst()->stoppedItems.push_back(boost::static_pointer_cast<Item>(shared_from_this()));
 		if (!Map::Inst()->Walkable(x, y)) {
 			for (int radius = 1; radius < 10; ++radius) {
-				for (int xi = x - radius; xi <= x + radius; ++xi) {
-					for (int yi = y - radius; yi <= y + radius; ++yi) {
+				for (unsigned int xi = x - radius; xi <= x + radius; ++xi) {
+					for (unsigned int yi = y - radius; yi <= y + radius; ++yi) {
 						if (Map::Inst()->Walkable(xi, yi)) {
 							Position(Coordinate(xi, yi));
 							return;

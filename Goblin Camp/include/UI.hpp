@@ -95,6 +95,9 @@ public:
 	static void ChooseDig();
 	static void ChooseCreateFilth();
 	static void ChooseCreateWater();
+	static void ChooseCorrupt();
+	static void ChooseNaturify();
+	static void ChooseRemoveNatureObjects();
 	void SetCallback(boost::function<void(Coordinate)>);
 	void SetRectCallback(boost::function<void(Coordinate,Coordinate)>);
 	void SetPlacementCallback(boost::function<bool(Coordinate,Coordinate)>);

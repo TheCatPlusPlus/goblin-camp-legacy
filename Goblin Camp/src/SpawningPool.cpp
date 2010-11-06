@@ -59,7 +59,7 @@ void SpawningPool::Update() {
 		if (dumpFilth && rand() % (UPDATES_PER_SECOND * 5) == 0) {
 			if (Game::Inst()->filthList.size() > 0) {
 				boost::shared_ptr<Job> filthDumpJob(new Job("Dump filth", LOW));
-				filthDumpJob->tasks.push_back(Task(FIND, Coordinate(0,0), boost::weak_ptr<Entity>(), Item::StringToItemCategory("Liquid container"), EMPTY));
+				filthDumpJob->tasks.push_back(Task(FIND, Coordinate(0,0), boost::weak_ptr<Entity>(), Item::StringToItemCategory("Barrel"), EMPTY));
 				filthDumpJob->tasks.push_back(Task(MOVE));
 				filthDumpJob->tasks.push_back(Task(TAKE));
 				filthDumpJob->tasks.push_back(Task(FORGET)); //Otherwise MOVEADJACENT will try to move adjacent to the container
@@ -131,9 +131,10 @@ void SpawningPool::Update() {
 		}
 
 		//Spawn / Expand
-		if (Map::Inst()->GetFilth(x, y).lock()) {
+		if (Map::Inst()->GetFilth(x, y).lock() && Map::Inst()->GetFilth(x, y).lock()->Depth() > 0) {
 			boost::shared_ptr<FilthNode> filthNode = Map::Inst()->GetFilth(x,y).lock();
 			filth += filthNode->Depth();
+			for (int i = 0; i < 1 + rand() % filthNode->Depth(); ++i) Map::Inst()->Corrupt(x, y);
 			filthNode->Depth(0);
 		}
 		while (!corpseContainer->empty()) {
@@ -141,6 +142,7 @@ void SpawningPool::Update() {
 			boost::weak_ptr<Item> corpse = corpseContainer->GetFirstItem();
 			corpseContainer->RemoveItem(corpse);
 			Game::Inst()->RemoveItem(corpse);
+			for (int i = 0; i < 1 + rand() % 10; ++i) Map::Inst()->Corrupt(x, y);
 		}
 
 		if (corpses + filth > std::min(2 + 2*spawns, (unsigned int)10)) {
@@ -224,14 +226,34 @@ void SpawningPool::Expand() {
 		if (location.X() > b.X()) b.X(location.X());
 		if (location.Y() > b.Y()) b.Y(location.Y());
 
-		Map::Inst()->SetConstruction(location.X(), location.Y(), uid);
-
-		if (Map::Inst()->NatureObject(location.X(), location.Y()) > 0) {
+		//Swallow nature objects
+		if (Map::Inst()->NatureObject(location.X(), location.Y()) >= 0) {
 			Game::Inst()->RemoveNatureObject(Game::Inst()->natureList[Map::Inst()->NatureObject(location.X(), location.Y())]);
 		}
+		//Destroy buildings
+		if (Map::Inst()->GetConstruction(location.X(), location.Y()) >= 0) {
+			Attack attack;
+			attack.Type(DAMAGE_MAGIC);
+			TCOD_dice_t damage;
+			damage.nb_dices = 100;
+			damage.nb_faces = 100;
+			damage.multiplier = 100;
+			damage.addsub = 1000;
+			attack.Amount(damage);
+			if (Game::Inst()->GetConstruction(Map::Inst()->GetConstruction(location.X(), location.Y())).lock()) 
+				Game::Inst()->GetConstruction(Map::Inst()->GetConstruction(location.X(), location.Y())).lock()->Damage(&attack);
+
+		}
+
+		Map::Inst()->SetConstruction(location.X(), location.Y(), uid);
+
+		for (int i = 0; i < 5 + rand() % 5; ++i) Map::Inst()->Corrupt(location.X(), location.Y());
+
 	} else {
 		Announce::Inst()->AddMsg("The spawning pool bubbles ominously", TCODColor::darkGreen, Position());
+		for (int i = 0; i < 5; ++i) Map::Inst()->Corrupt(x, y);
 	}
+
 }
 
 void SpawningPool::Draw(Coordinate upleft, TCODConsole* console) {

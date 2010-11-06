@@ -44,6 +44,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "UI/YesNoDialog.hpp"
 #include "scripting/Event.hpp"
 #include "SpawningPool.hpp"
+#include "Camp.hpp"
 
 int Game::ItemTypeCount = 0;
 int Game::ItemCatCount = 0;
@@ -77,10 +78,10 @@ Game* Game::Inst() {
 }
 
 //Checks whether all the tiles under the rectangle (target is the up-left corner) are buildable
-bool Game::CheckPlacement(Coordinate target, Coordinate size) {
+bool Game::CheckPlacement(Coordinate target, Coordinate size, std::set<TileType> tileReqs) {
 	for (int x = target.X(); x < target.X() + size.X(); ++x) {
 		for (int y = target.Y(); y < target.Y() + size.Y(); ++y) {
-			if (x < 0 || y < 0 || x >= Map::Inst()->Width() || y >= Map::Inst()->Height() || !Map::Inst()->Buildable(x,y)) return false;
+			if (x < 0 || y < 0 || x >= Map::Inst()->Width() || y >= Map::Inst()->Height() || !Map::Inst()->Buildable(x,y) || (!tileReqs.empty() && tileReqs.find(Map::Inst()->Type(x,y)) == tileReqs.end()) ) return false;
 		}
 	}
 	return true;
@@ -715,11 +716,13 @@ void Game::Update() {
 
 	if (time % (UPDATES_PER_SECOND * 1) == 0) StockManager::Inst()->Update();
 
-	if (time % (UPDATES_PER_SECOND * 1) == UPDATES_PER_SECOND/2) JobManager::Inst()->Update();
+	if (time % (UPDATES_PER_SECOND * 1) == 0) JobManager::Inst()->Update();
 
 	events->Update(safeMonths > 0);
 
-	Map::Inst()->Naturify(rand() % Map::Inst()->Width(), rand() % Map::Inst()->Height());
+	if (time % (UPDATES_PER_SECOND * 1) == 0) Map::Inst()->Naturify(rand() % Map::Inst()->Width(), rand() % Map::Inst()->Height());
+
+	if (time % (UPDATES_PER_SECOND * 2) == 0) Camp::Inst()->UpdateTier();
 }
 
 boost::shared_ptr<Job> Game::StockpileItem(boost::weak_ptr<Item> item, bool returnJob) {
@@ -806,7 +809,10 @@ void Game::Draw(Coordinate upleft, TCODConsole* buffer, bool drawUI) {
 
 	InternalDrawMapItems("static constructions",  staticConstructionList, upleft, buffer);
 	InternalDrawMapItems("dynamic constructions", dynamicConstructionList, upleft, buffer);
-	InternalDrawMapItems("items",                 itemList, upleft, buffer);
+	//TODO: Make this consistent
+	for (std::map<int,boost::shared_ptr<Item> >::iterator itemi = itemList.begin(); itemi != itemList.end(); ++itemi) {
+		if (!itemi->second->ContainedIn().lock()) itemi->second->Draw(upleft, buffer);
+	}
 	InternalDrawMapItems("nature objects",        natureList, upleft, buffer);
 	InternalDrawMapItems("NPCs",                  npcList, upleft, buffer);
 
@@ -999,6 +1005,7 @@ void Game::FellTree(Coordinate a, Coordinate b) {
 				if (natObj.lock() && natObj.lock()->Tree() && !natObj.lock()->Marked()) {
 					natObj.lock()->Mark();
 					boost::shared_ptr<Job> fellJob(new Job("Fell tree", MED, 0, true));
+					fellJob->Attempts(50);
 					fellJob->ConnectToEntity(natObj);
 					fellJob->SetRequiredTool(Item::StringToItemCategory("Slashing weapon"));
 					fellJob->tasks.push_back(Task(MOVEADJACENT, natObj.lock()->Position(), natObj));
@@ -1416,9 +1423,11 @@ void Game::CreateNatureObject(Coordinate location) {
 
 		//Populate the priority queue with all possible plants and give each one a random
 		//value based on their rarity
+		bool evil = Map::Inst()->GetCorruption(location.X(), location.Y()) >= 100;
 		for (unsigned int i = 0; i < NatureObject::Presets.size(); ++i) {
 			if (NatureObject::Presets[i].minHeight <= height &&
-				NatureObject::Presets[i].maxHeight >= height)
+				NatureObject::Presets[i].maxHeight >= height &&
+				NatureObject::Presets[i].evil == evil)
 				natureObjectQueue.push(std::pair<int,int>(rand() % NatureObject::Presets[i].rarity + rand() % 3, i));
 		}
 
@@ -1433,12 +1442,13 @@ void Game::CreateNatureObject(Coordinate location) {
 		if (rand() % 100 < rarity) {
 
 			for (int clus = 0; clus < NatureObject::Presets[chosen].cluster; ++clus) {
-				int ax = location.X() + ((rand() % NatureObject::Presets[chosen].cluster) - std::max(1, NatureObject::Presets[chosen].cluster/2));
-				int ay = location.Y() + ((rand() % NatureObject::Presets[chosen].cluster) - std::max(1, NatureObject::Presets[chosen].cluster/2));
+				int ax = location.X() + ((rand() % NatureObject::Presets[chosen].cluster) - NatureObject::Presets[chosen].cluster/2);
+				int ay = location.Y() + ((rand() % NatureObject::Presets[chosen].cluster) - NatureObject::Presets[chosen].cluster/2);
 				if (ax < 0) ax = 0; if (ax >= Map::Inst()->Width()) ax = Map::Inst()->Width()-1;
 				if (ay < 0) ay = 0; if (ay >= Map::Inst()->Height()) ay = Map::Inst()->Height()-1;
-				if (Map::Inst()->Walkable(ax,ay) && Map::Inst()->Type(ax,ay) == TILEGRASS
-					&& Map::Inst()->NatureObject(ax,ay) < 0) {
+				if (Map::Inst()->Walkable(ax,ay) && Map::Inst()->Type(ax,ay) == TILEGRASS &&
+					Map::Inst()->NatureObject(ax,ay) < 0 &&
+					Map::Inst()->GetConstruction(ax, ay) < 0) {
 						boost::shared_ptr<NatureObject> natObj(new NatureObject(Coordinate(ax,ay), chosen));
 						natureList.insert(std::pair<int, boost::shared_ptr<NatureObject> >(natObj->Uid(), natObj));
 						Map::Inst()->NatureObject(ax,ay,natObj->Uid());
@@ -1446,6 +1456,43 @@ void Game::CreateNatureObject(Coordinate location) {
 						Map::Inst()->Buildable(ax,ay,NatureObject::Presets[natObj->Type()].walkable);
 						Map::Inst()->BlocksLight(ax,ay,!NatureObject::Presets[natObj->Type()].walkable);
 				}
+			}
+		}
+	}
+}
+
+void Game::CreateNatureObject(Coordinate location, std::string name) {
+	unsigned int natureObjectIndex = 0;
+	for (std::vector<NatureObjectPreset>::iterator preseti = NatureObject::Presets.begin(); preseti != NatureObject::Presets.end();
+		++preseti) {
+			if (boost::iequals(preseti->name, name)) break;
+			++natureObjectIndex;
+	}
+
+	if (natureObjectIndex < NatureObject::Presets.size() && 
+		boost::iequals(NatureObject::Presets[natureObjectIndex].name, name)) {
+		if (location.X() >= 0 && location.X() < Map::Inst()->Width() && 
+			location.Y() >= 0 && location.Y() < Map::Inst()->Height() &&
+			Map::Inst()->NatureObject(location.X(),location.Y()) < 0 &&
+			Map::Inst()->GetConstruction(location.X(), location.Y()) < 0) {
+				boost::shared_ptr<NatureObject> natObj(new NatureObject(Coordinate(location.X(),location.Y()), natureObjectIndex));
+				natureList.insert(std::pair<int, boost::shared_ptr<NatureObject> >(natObj->Uid(), natObj));
+				Map::Inst()->NatureObject(location.X(),location.Y(),natObj->Uid());
+				Map::Inst()->SetWalkable(location.X(),location.Y(),NatureObject::Presets[natObj->Type()].walkable);
+				Map::Inst()->Buildable(location.X(),location.Y(),NatureObject::Presets[natObj->Type()].walkable);
+				Map::Inst()->BlocksLight(location.X(),location.Y(),!NatureObject::Presets[natObj->Type()].walkable);
+		}
+
+	}
+}
+
+void Game::RemoveNatureObject(Coordinate a, Coordinate b) {
+	for (int x = a.X(); x <= b.X(); ++x) {
+		for (int y = a.Y(); y <= b.Y(); ++y) {
+			int uid = Map::Inst()->NatureObject(x,y);
+			if (uid >= 0) {
+				Map::Inst()->NatureObject(x,y,-1);
+				natureList.erase(uid);
 			}
 		}
 	}
