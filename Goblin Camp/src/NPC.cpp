@@ -1,4 +1,4 @@
-/* Copyright 2010 Ilkka Halila
+/* Copyright 2010-2011 Ilkka Halila
 This file is part of Goblin Camp.
 
 Goblin Camp is free software: you can redistribute it and/or modify
@@ -1821,8 +1821,7 @@ class NPCListener : public ITCODParserListener {
 		return true;
 	}
 	void error(const char *msg) {
-		LOG("NPCListener: " << msg);
-		Game::Inst()->Exit(false);
+		throw std::runtime_error(msg);
 	}
 };
 
@@ -1880,6 +1879,9 @@ std::string NPC::NPCTypeToString(NPCType type) {
 }
 
 NPCType NPC::StringToNPCType(std::string typeName) {
+	if (NPCTypeNames.find(typeName) == NPCTypeNames.end()) {
+		return -1;
+	}
 	return NPCTypeNames[typeName];
 }
 

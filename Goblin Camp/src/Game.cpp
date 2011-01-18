@@ -1,4 +1,4 @@
-/* Copyright 2010 Ilkka Halila
+/* Copyright 2010-2011 Ilkka Halila
 This file is part of Goblin Camp.
 
 Goblin Camp is free software: you can redistribute it and/or modify
@@ -14,6 +14,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License 
 along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "stdafx.hpp"
+
+#include "scripting/_python.hpp"
 
 #ifdef DEBUG
 #include <iostream>
@@ -35,6 +37,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "Farmplot.hpp"
 #include "Door.hpp"
 #include "data/Config.hpp"
+#include "scripting/Engine.hpp"
 #include "scripting/Event.hpp"
 #include "SpawningPool.hpp"
 #include "Camp.hpp"
@@ -764,7 +767,7 @@ void Game::Update() {
 				}
 			}
 		} else {
-			for (unsigned int i = 0; i < std::max((unsigned int)100, freeItems.size()/4); ++i) {
+			for (unsigned int i = 0; i < std::max((size_t)100, freeItems.size()/4); ++i) {
 				std::set<boost::weak_ptr<Item> >::iterator itemi = boost::next(freeItems.begin(), Random::Choose(freeItems));
 				if (boost::shared_ptr<Item> item = itemi->lock()) {
 					if (!item->Reserved() && item->GetFaction() == 0 && item->GetVelocity() == 0) 
@@ -795,7 +798,11 @@ void Game::Update() {
 
 	for (std::list<std::pair<int, boost::function<void()> > >::iterator delit = delays.begin(); delit != delays.end();) {
 		if (--delit->first <= 0) {
-			delit->second();
+			try {
+				delit->second();
+			} catch (const py::error_already_set&) {
+				Script::LogException();
+			}
 			delit = delays.erase(delit);
 		} else ++delit;
 	}
@@ -930,7 +937,7 @@ void Game::DeTillFarmPlots() {
 
 //First generates a heightmap, then translates that into the corresponding tiles
 //Third places plantlife according to heightmap, and some wildlife as well
-void Game::GenerateMap(uint32_t seed) {
+void Game::GenerateMap(uint32 seed) {
 	Random::Generator random(seed);
 	
 	Map* map = Map::Inst();

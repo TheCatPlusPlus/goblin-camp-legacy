@@ -1,4 +1,4 @@
-/* Copyright 2010 Ilkka Halila
+/* Copyright 2010-2011 Ilkka Halila
 This file is part of Goblin Camp.
 
 Goblin Camp is free software: you can redistribute it and/or modify
@@ -134,8 +134,7 @@ class NatureObjectListener : public ITCODParserListener {
 		return true;
 	}
 	void error(const char *msg) {
-		LOG("NatureObjectListener: " << msg);
-		Game::Inst()->Exit();
+		throw std::runtime_error(msg);
 	}
 };
 

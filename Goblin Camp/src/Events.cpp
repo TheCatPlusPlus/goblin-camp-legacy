@@ -1,4 +1,4 @@
-/* Copyright 2010 Ilkka Halila
+/* Copyright 2010-2011 Ilkka Halila
 This file is part of Goblin Camp.
 
 Goblin Camp is free software: you can redistribute it and/or modify
@@ -95,13 +95,13 @@ void Events::SpawnHostileMonsters() {
 
 		case 2:
 			a.X(map->Width() - 2);
-		a.Y(Random::Generate(map->Height() - 21));
+			a.Y(Random::Generate(map->Height() - 21));
 			b.X(map->Width() - 1);
 			b.Y(a.Y() + 20);
 			break;
 
 		case 3:
-		a.X(Random::Generate(map->Width() - 21));
+			a.X(Random::Generate(map->Width() - 21));
 			a.Y(map->Height() - 2);
 			b.X(a.X() + 20);
 			b.Y(map->Height() - 1);
