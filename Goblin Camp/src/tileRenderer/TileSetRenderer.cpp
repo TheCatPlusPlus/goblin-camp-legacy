@@ -20,15 +20,21 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "Logger.hpp"
 #include "Game.hpp"
 #include "Data/Paths.hpp"
+#include "MathEx.hpp"
 
-TileSetRenderer::TileSetRenderer(int resolutionX, int resolutionY, boost::shared_ptr<TileSet> ts) 
-: screenWidth(resolutionX), 
+TileSetRenderer::TileSetRenderer(int resolutionX, int resolutionY, boost::shared_ptr<TileSet> ts, TCODConsole * mapConsole) 
+: tcodConsole(mapConsole),
+  screenWidth(resolutionX), 
   screenHeight(resolutionY),
   keyColor(TCODColor::magenta),
   mapSurface(NULL),
   tempBuffer(NULL),
   first(true),
-  tileSet(ts) {
+  tileSet(ts),
+  mapOffsetX(0),
+  mapOffsetY(0),
+  startTileX(0),
+  startTileY(0) {
    Uint32 rmask, gmask, bmask, amask;
    #if SDL_BYTEORDER == SDL_BIG_ENDIAN
        rmask = 0xff000000;
@@ -74,29 +80,66 @@ void TileSetRenderer::PreparePrefabs()
 	}
 }
 
-//TODO: Optimize. This causes the biggest performance hit by far right now 
-void TileSetRenderer::DrawMap(TCODConsole * console, Map* map, Coordinate upleft, int offsetX, int offsetY, int sizeX, int sizeY) {
-	if (sizeX == -1) sizeX = console->getWidth();
-	if (sizeY == -1) sizeY = console->getHeight();
+Coordinate TileSetRenderer::TileAt(int x, int y, float focusX, float focusY, int viewportX, int viewportY, int viewportW, int viewportH) const {
+	if (viewportW == -1) viewportW = screenWidth;
+	if (viewportH == -1) viewportH = screenHeight;
 
-	for (int x = offsetX; x < offsetX + sizeX; x++) {
-		for (int y = offsetY; y < offsetY + sizeY; y++) {
-			console->putCharEx(x, y, ' ', TCODColor::black, keyColor);
+	float left = focusX * tileSet->TileWidth() - viewportW * 0.5f;
+	float up = focusY * tileSet->TileHeight() - viewportH * 0.5f;
+	
+	return Coordinate(FloorToInt::convert((left + x) / tileSet->TileWidth()), FloorToInt::convert((up + y) / tileSet->TileHeight()));
+}
+
+//TODO: Optimize. This causes the biggest performance hit by far right now 
+void TileSetRenderer::DrawMap(Map* map, float focusX, float focusY, int viewportX, int viewportY, int viewportW, int viewportH) {
+	if (viewportW == -1) viewportW = screenWidth;
+	if (viewportH == -1) viewportH = screenHeight;
+
+	// Merge viewport to console
+	if (tcodConsole != 0) {
+		int charX, charY;
+		TCODSystem::getCharSize(&charX, &charY);
+		int offsetX = FloorToInt::convert(float(viewportX) / charX);
+		int offsetY = FloorToInt::convert(float(viewportY) / charY);
+		int sizeX = CeilToInt::convert(float(viewportW + offsetX * charX) / charX) - offsetX;
+		int sizeY = CeilToInt::convert(float(viewportH + offsetY * charY) / charY) - offsetY;
+		viewportX = offsetX * charX;
+		viewportY = offsetY * charY;
+		viewportW = sizeX * charX;
+		viewportH = sizeY * charY;
+
+		for (int x = offsetX; x < offsetX + sizeX; x++) {
+			for (int y = offsetY; y < offsetY + sizeY; y++) {
+				tcodConsole->putCharEx(x, y, ' ', TCODColor::black, keyColor);
+				tcodConsole->setDirty(x,y,1,1);
+			}
 		}
 	}
-    // And then render to map
-	int screenDeltaX = upleft.X();
-	int screenDeltaY = upleft.Y();
-	for (int y = 0; y < sizeY; ++y) {
-		for (int x = 0; x < sizeX; ++x) {
-			int tileX = x + upleft.X();
-			int tileY = y + upleft.Y();
-			int mapX = x + offsetX;
-			int mapY = y + offsetY;
 
+	SDL_Rect viewportRect;
+	viewportRect.x = viewportX;
+	viewportRect.y = viewportY;
+	viewportRect.w = viewportW;
+	viewportRect.h = viewportH;
+	
+	SDL_SetClipRect(mapSurface, &viewportRect);
+	
+	// These are over-estimates, sometimes fewer tiles are needed.
+	startTileX = int((focusX * tileSet->TileWidth() - viewportRect.w / 2) / tileSet->TileWidth()) - 1;
+	startTileY = int((focusY * tileSet->TileHeight() - viewportRect.h / 2) / tileSet->TileHeight()) - 1;
+	mapOffsetX = int(startTileX * tileSet->TileWidth() - focusX * tileSet->TileWidth() + viewportRect.w / 2) + viewportX;
+	mapOffsetY = int(startTileY * tileSet->TileHeight() - focusY * tileSet->TileHeight() + viewportRect.h / 2) + viewportY;
+	int tilesX = CeilToInt::convert(boost::numeric_cast<float>(viewportRect.w) / tileSet->TileWidth()) + 2;
+	int tilesY = CeilToInt::convert(boost::numeric_cast<float>(viewportRect.h) / tileSet->TileHeight()) + 2;
+	
+    // And then render to map
+	for (int y = 0; y < tilesY; ++y) {
+		for (int x = 0; x <= tilesX; ++x) {
+			int tileX = x + startTileX;
+			int tileY = y + startTileY;
+			
 			// Draw Terrain
-			SDL_Rect dstRect(CalcDest(mapX, mapY));
-			console->setDirty(mapX, mapY, 1, 1);
+			SDL_Rect dstRect(CalcDest(tileX, tileY));
 			if (tileX >= 0 && tileX < map->Width() && tileY >= 0 && tileY < map->Height()) {
 				DrawTerrain(map, tileX, tileY, &dstRect);
 				DrawWater(map, tileX, tileY, &dstRect);
@@ -113,12 +156,22 @@ void TileSetRenderer::DrawMap(TCODConsole * console, Map* map, Coordinate upleft
 		}
 	}
 
-	DrawMarkers(map, upleft, offsetX, offsetY, sizeX, sizeY);
+	DrawMarkers(map, startTileX, startTileY, tilesX, tilesY);
 
-	DrawNatureObjects(upleft, offsetX, offsetY, sizeX, sizeY);
-	DrawItems(upleft, offsetX, offsetY, sizeX, sizeY);
-	DrawNPCs(upleft, offsetX, offsetY, sizeX, sizeY);
+	DrawNatureObjects(startTileX, startTileY, tilesX, tilesY);
+	DrawItems(startTileX, startTileY, tilesX, tilesY);
+	DrawNPCs(startTileX, startTileY, tilesX, tilesY);
+
+	SDL_SetClipRect(mapSurface, NULL);
 }
+
+void TileSetRenderer::SetCursorMode(CursorType mode) {}
+void TileSetRenderer::SetCursorMode(const NPCPreset& preset) {}
+void TileSetRenderer::SetCursorMode(const ItemPreset& preset) {}
+void TileSetRenderer::SetCursorMode(int other) {}
+	
+void TileSetRenderer::DrawCursor(const Coordinate& pos, float focusX, float focusY, bool placeable) {}
+void TileSetRenderer::DrawCursor(const Coordinate& start, const Coordinate& end, float focusX, float focusY, bool placeable) {}
 
 void TileSetRenderer::DrawConstruction(Map* map, int tileX, int tileY, SDL_Rect * dstRect)
 {
@@ -129,27 +182,27 @@ void TileSetRenderer::DrawConstruction(Map* map, int tileX, int tileY, SDL_Rect 
 	}
 }
 
-void TileSetRenderer::DrawItems(Coordinate upleft, int offsetX, int offsetY, int sizeX, int sizeY) {
+void TileSetRenderer::DrawItems(int startX, int startY, int sizeX, int sizeY) {
 	for (std::map<int,boost::shared_ptr<Item> >::iterator itemi = Game::Inst()->itemList.begin(); itemi != Game::Inst()->itemList.end(); ++itemi) {
 		if (!itemi->second->ContainedIn().lock()) {
 			Coordinate itemPos = itemi->second->Position();
-			if (itemPos.X() >= upleft.X() && itemPos.X() < upleft.X() + sizeX
-				&& itemPos.Y() >= upleft.Y() && itemPos.Y() < upleft.Y() + sizeY)
+			if (itemPos.X() >= startX && itemPos.X() < startX + sizeX
+				&& itemPos.Y() >= startY && itemPos.Y() < startY + sizeY)
 			{
-				SDL_Rect dstRect(CalcDest(offsetX + itemPos.X() - upleft.X(), offsetY + itemPos.Y() - upleft.Y()));
+				SDL_Rect dstRect(CalcDest(itemPos.X(), itemPos.Y()));
 				tileSet->DrawItem(itemi->second, mapSurface, &dstRect);
 			}
 		}
 	}
 }
 
-void TileSetRenderer::DrawNatureObjects(Coordinate upleft, int offsetX, int offsetY, int sizeX, int sizeY) {
+void TileSetRenderer::DrawNatureObjects(int startX, int startY, int sizeX, int sizeY) {
 	for (std::map<int,boost::shared_ptr<NatureObject> >::iterator planti = Game::Inst()->natureList.begin(); planti != Game::Inst()->natureList.end(); ++planti) {
 		Coordinate plantPos = planti->second->Position();
-		if (plantPos.X() >= upleft.X() && plantPos.X() < upleft.X() + sizeX
-				&& plantPos.Y() >= upleft.Y() && plantPos.Y() < upleft.Y() + sizeY)
+		if (plantPos.X() >= startX && plantPos.X() < startX + sizeX
+				&& plantPos.Y() >= startY && plantPos.Y() < startY + sizeY)
 		{
-			SDL_Rect dstRect(CalcDest(offsetX + plantPos.X() - upleft.X(), offsetY + plantPos.Y() - upleft.Y()));
+			SDL_Rect dstRect(CalcDest(plantPos.X(), plantPos.Y()));
 			if (planti->second->Marked())
 			{
 				tileSet->DrawMarkedOverlay(mapSurface, &dstRect);
@@ -159,26 +212,26 @@ void TileSetRenderer::DrawNatureObjects(Coordinate upleft, int offsetX, int offs
 	}
 }
 
-void TileSetRenderer::DrawNPCs(Coordinate upleft, int offsetX, int offsetY, int sizeX, int sizeY) {
+void TileSetRenderer::DrawNPCs(int startX, int startY, int sizeX, int sizeY) {
 	for (std::map<int,boost::shared_ptr<NPC> >::iterator npci = Game::Inst()->npcList.begin(); npci != Game::Inst()->npcList.end(); ++npci) {
 		Coordinate npcPos = npci->second->Position();
-		if (npcPos.X() >= upleft.X() && npcPos.X() < upleft.X() + sizeX
-				&& npcPos.Y() >= upleft.Y() && npcPos.Y() < upleft.Y() + sizeY)
+		if (npcPos.X() >= startX && npcPos.X() < startX + sizeX
+				&& npcPos.Y() >= startY && npcPos.Y() < startY + sizeY)
 		{
-			SDL_Rect dstRect(CalcDest(offsetX + npcPos.X() - upleft.X(), offsetY + npcPos.Y() - upleft.Y()));
+			SDL_Rect dstRect(CalcDest(npcPos.X(), npcPos.Y()));
 			tileSet->DrawNPC(npci->second, mapSurface, &dstRect);
 		}
 	}
 }
 
-void TileSetRenderer::DrawMarkers(Map* map, Coordinate upleft, int offsetX, int offsetY, int sizeX, int sizeY)
+void TileSetRenderer::DrawMarkers(Map * map, int startX, int startY, int sizeX, int sizeY)
 {
 	for (Map::MarkerIterator markeri = map->MarkerBegin(); markeri != map->MarkerEnd(); ++markeri) {
 		int markerX = markeri->second.X();
 		int markerY = markeri->second.Y();
-		if (markerX >= upleft.X() && markerY < upleft.X() + sizeX
-			&& markerY >= upleft.Y() && markerY < upleft.Y() + sizeY) {
-				SDL_Rect dstRect( CalcDest(markerX - upleft.X() + offsetX, markerY - upleft.Y() + offsetY));
+		if (markerX >= startX && markerY < startX + sizeX
+			&& markerY >= startY && markerY < startY + sizeY) {
+				SDL_Rect dstRect( CalcDest(markerX, markerY));
 				tileSet->DrawMarker(mapSurface, &dstRect);
 		}
 	}

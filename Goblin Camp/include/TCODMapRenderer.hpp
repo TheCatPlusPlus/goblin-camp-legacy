@@ -20,9 +20,22 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 class TCODMapRenderer : public MapRenderer
 {
 public:
-	TCODMapRenderer();
+	TCODMapRenderer(TCODConsole * mapConsole);
 	~TCODMapRenderer();
 
-	void DrawMap(TCODConsole * console, Map* map, Coordinate upleft, int posX = 0, int posY = 0, int sizeX = 0, int sizeY = 0) ;
 	void PreparePrefabs();
+	
+	Coordinate TileAt(int screenX, int screenY, float focusX, float focusY, int viewportX, int viewportY, int viewportW , int viewportH) const;
+	void DrawMap(Map* map, float focusX, float focusY, int viewportX, int viewportY, int viewportW, int viewportH) ;
+	
+	void SetCursorMode(CursorType mode);
+	void SetCursorMode(const NPCPreset& preset);
+	void SetCursorMode(const ItemPreset& preset);
+	void SetCursorMode(int other);
+	void DrawCursor(const Coordinate& pos, float focusX, float focusY, bool placeable);
+	void DrawCursor(const Coordinate& start, const Coordinate& end, float focusX, float focusY, bool placeable);
+
+private:
+	TCODConsole * console;
+	int cursorChar;
 };

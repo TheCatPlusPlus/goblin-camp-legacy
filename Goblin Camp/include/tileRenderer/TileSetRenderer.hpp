@@ -24,13 +24,24 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 class TileSetRenderer : public MapRenderer, public ITCODSDLRenderer, private boost::noncopyable
 {
 public:
-	TileSetRenderer(int screenWidth, int screenHeight, boost::shared_ptr<TileSet> tileSet);
+	TileSetRenderer(int screenWidth, int screenHeight, boost::shared_ptr<TileSet> tileSet, TCODConsole * mapConsole = 0);
 	~TileSetRenderer();
 
-	void DrawMap(TCODConsole * console, Map* map, Coordinate upleft, int offsetX = 0, int offsetY = 0, int sizeX = -1, int sizeY = -1) ;
+	Coordinate TileAt(int screenX, int screenY, float focusX, float focusY, int viewportX, int viewportY, int viewportW, int viewportH) const;
+	void DrawMap(Map* map, float focusX, float focusY, int viewportX, int viewportY, int viewportW, int viewportH) ;
 	void PreparePrefabs();
+
+	void SetCursorMode(CursorType mode);
+	void SetCursorMode(const NPCPreset& preset);
+	void SetCursorMode(const ItemPreset& preset);
+	void SetCursorMode(int other);
+	void DrawCursor(const Coordinate& pos, float focusX, float focusY, bool placeable);
+	void DrawCursor(const Coordinate& start, const Coordinate& end, float focusX, float focusY, bool placeable);
+
 	void render(void *sdlSurface);
 private:
+	TCODConsole * tcodConsole;
+
 	// the font characters size
 	int screenWidth, screenHeight;
 	SDL_Surface *mapSurface;
@@ -38,6 +49,8 @@ private:
 	boost::shared_ptr<TileSet> tileSet;
 	TCODColor keyColor;
 	bool first;
+	int mapOffsetX, mapOffsetY; // This is the pixel offset when drawing to the viewport
+	int startTileX, startTileY;
 
 	void DrawTerrain			(Map* map, int tileX, int tileY, SDL_Rect * dstRect);
 	void DrawWater				(Map* map, int tileX, int tileY, SDL_Rect * dstRect);
@@ -45,10 +58,10 @@ private:
 	void DrawTerritoryOverlay	(Map* map, int tileX, int tileY, SDL_Rect * dstRect);
 	void DrawConstruction		(Map* map, int tileX, int tileY, SDL_Rect * dstRect);
 
-	void DrawMarkers(Map * map, Coordinate upleft, int posX, int posY, int sizeX, int sizeY);
-	void DrawItems(Coordinate upleft, int tileX, int tileY, int sizeX, int sizeY);
-	void DrawNatureObjects(Coordinate upleft, int tileX, int tileY, int sizeX, int sizeY);
-	void DrawNPCs(Coordinate upleft, int tileX, int tileY, int sizeX, int sizeY);
+	void DrawMarkers(Map * map, int startTileX, int startTileY, int sizeX, int sizeY);
+	void DrawItems(int startTileX, int startTileY, int sizeX, int sizeY);
+	void DrawNatureObjects(int startTileX, int startTileY, int sizeX, int sizeY);
+	void DrawNPCs(int startTileX, int startTileY, int sizeX, int sizeY);
 
-	SDL_Rect CalcDest(int mapPosX, int mapPosY) { SDL_Rect dstRect = {tileSet->TileWidth() * mapPosX, tileSet->TileHeight() * mapPosY, tileSet->TileWidth(), tileSet->TileHeight()}; return dstRect; }
+	SDL_Rect CalcDest(int mapPosX, int mapPosY) { SDL_Rect dstRect = {tileSet->TileWidth() * (mapPosX - startTileX) + mapOffsetX, tileSet->TileHeight() * (mapPosY - startTileY) + mapOffsetY, tileSet->TileWidth(), tileSet->TileHeight()}; return dstRect; }
 };
