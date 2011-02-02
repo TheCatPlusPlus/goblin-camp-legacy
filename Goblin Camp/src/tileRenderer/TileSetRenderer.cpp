@@ -172,6 +172,10 @@ void TileSetRenderer::DrawMap(Map* map, float focusX, float focusY, int viewport
 	SDL_SetClipRect(mapSurface.get(), NULL);
 }
 
+float TileSetRenderer::ScrollRate() const {
+	return 16.0f / (tileSet->TileWidth() + tileSet->TileHeight());
+}
+
 void TileSetRenderer::SetCursorMode(CursorType mode) {
 	cursorMode = mode;
 	cursorHint = -1;
@@ -310,7 +314,11 @@ void TileSetRenderer::DrawMarkers(Map * map, int startX, int startY, int sizeX, 
 
 void TileSetRenderer::DrawTerrain(Map* map, int tileX, int tileY, SDL_Rect * dstRect) {
 	TileType type(map->Type(tileX, tileY));
-	tileSet->DrawTerrain(type, mapSurface.get(), dstRect);
+	bool connectN(map->Type(tileX, tileY - 1) == type);
+	bool connectE(map->Type(tileX + 1, tileY) == type);
+	bool connectS(map->Type(tileX, tileY + 1) == type);
+	bool connectW(map->Type(tileX - 1, tileY) == type);
+	tileSet->DrawTerrain(type, connectN, connectE, connectS, connectW, mapSurface.get(), dstRect);
 	
 	// Corruption
 	if (map->GetCorruption(tileX, tileY) >= 100) {
@@ -325,7 +333,11 @@ void TileSetRenderer::DrawTerrain(Map* map, int tileX, int tileY, SDL_Rect * dst
 	if (boost::shared_ptr<WaterNode> water = waterPtr.lock()) {
 		if (water->Depth() > 0)
 		{
-			tileSet->DrawWater(water->Depth() / 100, mapSurface.get(), dstRect);
+			bool waterN(WaterLevelAt(map, tileX, tileY - 1) > 0);
+			bool waterE(WaterLevelAt(map, tileX + 1, tileY) > 0);
+			bool waterS(WaterLevelAt(map, tileX, tileY + 1) > 0);
+			bool waterW(WaterLevelAt(map, tileX - 1, tileY) > 0);
+			tileSet->DrawWater(waterN, waterE, waterS, waterW, mapSurface.get(), dstRect);
 		}
 	}
 	if (map->GetBlood(tileX, tileY).lock())	{
