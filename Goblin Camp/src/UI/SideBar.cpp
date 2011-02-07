@@ -69,9 +69,15 @@ void SideBar::Draw(TCODConsole* console) {
 		console->printFrame(edgeX - width, topY, width, height, false, TCOD_BKGND_DEFAULT, entity.lock()->Name().c_str());
 		Game::Inst()->Draw(console, entity.lock()->Center().X() + 0.5f, entity.lock()->Center().Y() + 0.5f, false, edgeX - (width - 4), topY + 2, 11, 11);
 		
-		if (npc) { //Draw health bar
-			boost::shared_ptr<NPC> creature = boost::static_pointer_cast<NPC>(entity.lock());
-			int health = (int)(((double)creature->GetHealth() / (double)std::max(1, creature->GetMaxHealth())) * 10);
+		if (npc || construction) { //Draw health bar
+			int health;
+			if (npc) {
+				boost::shared_ptr<NPC> creature = boost::static_pointer_cast<NPC>(entity.lock());
+				health = (int)(((double)creature->GetHealth() / (double)std::max(1, creature->GetMaxHealth())) * 10);
+			} else {
+				boost::shared_ptr<Construction> construct = boost::static_pointer_cast<Construction>(entity.lock());
+				health = (int)(((double)construct->Condition() / (double)std::max(1, construct->GetMaxCondition())) * 10);
+			}
 			for (int i = 0; i < health; ++i) {
 				console->setChar(edgeX - (width-2), topY+12-i, 231);
 				TCODColor color;
@@ -131,11 +137,10 @@ void SideBar::SetEntity(boost::weak_ptr<Entity> ent) {
 		construction = true;
 		contents = boost::shared_ptr<Drawable>(new UIContainer(std::vector<Drawable *>(), 0, 0, width - 2, 12));
 		boost::shared_ptr<UIContainer> container = boost::dynamic_pointer_cast<UIContainer>(contents);
-		Frame *frame = new Frame("Seeds", std::vector<Drawable *>(), 0, 0, width - 2, 12);
-		frame->AddComponent(new UIList<std::pair<ItemType, bool>, std::map<ItemType, bool> >(fp->AllowedSeeds(), 1, 1, width - 4, 10,
-																							 SideBar::DrawSeed,
-																							 boost::bind(&FarmPlot::SwitchAllowed, fp.get(), _1)));
-		container->AddComponent(frame);			
+		container->AddComponent(new ScrollPanel(0, 0, width - 2, 15,
+			new UIList<std::pair<ItemType, bool>, std::map<ItemType, bool> >(fp->AllowedSeeds(), 0, 0, width - 2, fp->AllowedSeeds()->size(),
+												SideBar::DrawSeed,
+												boost::bind(&FarmPlot::SwitchAllowed, fp.get(), _1))));
 	} else if (boost::shared_ptr<Stockpile> sp = boost::dynamic_pointer_cast<Stockpile>(entity.lock())) {
 		height = 51;
 		construction = true;
@@ -144,9 +149,9 @@ void SideBar::SetEntity(boost::weak_ptr<Entity> ent) {
 		container->AddComponent(new Button("All", boost::bind(&Stockpile::SetAllAllowed, sp.get(), true), 0, 0, 8));
 		container->AddComponent(new Button("None", boost::bind(&Stockpile::SetAllAllowed, sp.get(), false), 9, 0, 8));
 		container->AddComponent(new ScrollPanel(0, 3, width - 2, 33,
-												new UIList<ItemCat>(&Item::Categories, 0, 0, width, Item::Categories.size(),
+												new UIList<ItemCat>(&Item::ParentCategories, 0, 0, width, Item::ParentCategories.size(),
 																	boost::bind(&ConstructionDialog::DrawCategory, boost::dynamic_pointer_cast<Construction>(entity.lock()).get(), _1, _2, _3, _4, _5, _6, _7),
-																	boost::bind(&Stockpile::SwitchAllowed, boost::dynamic_pointer_cast<Stockpile>(entity.lock()).get(), _1, true))));
+																	boost::bind(&Stockpile::SwitchAllowed, boost::dynamic_pointer_cast<Stockpile>(entity.lock()).get(), _1, true, true))));
 	} else if (boost::dynamic_pointer_cast<Construction>(entity.lock())) {
 		boost::shared_ptr<Construction> construct(boost::static_pointer_cast<Construction>(entity.lock()));
 		if (construct->HasTag(WORKSHOP)) {

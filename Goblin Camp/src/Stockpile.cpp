@@ -410,7 +410,16 @@ boost::weak_ptr<Container> Stockpile::Storage(Coordinate pos) {
 	return containers[pos];
 }
 
-void Stockpile::SwitchAllowed(ItemCategory cat, bool childrenAlso) {
+void Stockpile::SwitchAllowed(ItemCategory cat, bool childrenAlso, bool countParentsOnly) {
+	if (countParentsOnly) { //the itemcategory passed in is actually an index in this case, so it has to be modified
+		int index = (int)cat;
+		cat = -1;
+		for (int i = 0; i <= index; ++i) {
+			++cat;
+			while (Item::Categories[cat].parent != -1)
+				++cat;
+		}
+	}
 	allowed[cat] = !allowed[cat];
 	if (childrenAlso) {
 		for (std::map<ItemCategory, bool>::iterator alli = boost::next(allowed.find(cat)); alli != allowed.end(); ++alli) {
@@ -433,32 +442,36 @@ void Stockpile::SetAllAllowed(bool nallowed) {
 }
 
 void Stockpile::ItemAdded(boost::weak_ptr<Item> item) {
-	std::set<ItemCategory> categories = Item::Presets[item.lock()->Type()].categories;
-	for(std::set<ItemCategory>::iterator it = categories.begin(); it != categories.end(); it++) {
-		amount[*it] = amount[*it] + 1;
-	}
+	if (item.lock()) {
+		std::set<ItemCategory> categories = Item::Presets[item.lock()->Type()].categories;
+		for(std::set<ItemCategory>::iterator it = categories.begin(); it != categories.end(); it++) {
+			amount[*it] = amount[*it] + 1;
+		}
 
-    if(item.lock()->IsCategory(Item::StringToItemCategory("Container"))) {
-        boost::shared_ptr<Container> container = boost::static_pointer_cast<Container>(item.lock());
-        for(std::set<boost::weak_ptr<Item> >::iterator i = container->begin(); i != container->end(); i++) {
-            ItemAdded(*i);
-        }
-        container->AddListener(this);
-    }
+		if(item.lock()->IsCategory(Item::StringToItemCategory("Container"))) {
+			boost::shared_ptr<Container> container = boost::static_pointer_cast<Container>(item.lock());
+			for(std::set<boost::weak_ptr<Item> >::iterator i = container->begin(); i != container->end(); i++) {
+				ItemAdded(*i);
+			}
+			container->AddListener(this);
+		}
+	}
 }
 
 void Stockpile::ItemRemoved(boost::weak_ptr<Item> item) {
-    if(item.lock()->IsCategory(Item::StringToItemCategory("Container"))) {
-        boost::shared_ptr<Container> container = boost::static_pointer_cast<Container>(item.lock());
-        container->RemoveListener(this);
-        for(std::set<boost::weak_ptr<Item> >::iterator i = container->begin(); i != container->end(); i++) {
-            ItemRemoved(*i);
-        }
-    }
+	if (item.lock()) {
+		if(item.lock()->IsCategory(Item::StringToItemCategory("Container"))) {
+			boost::shared_ptr<Container> container = boost::static_pointer_cast<Container>(item.lock());
+			container->RemoveListener(this);
+			for(std::set<boost::weak_ptr<Item> >::iterator i = container->begin(); i != container->end(); i++) {
+				ItemRemoved(*i);
+			}
+		}
 
-	std::set<ItemCategory> categories = Item::Presets[item.lock()->Type()].categories;
-	for(std::set<ItemCategory>::iterator it = categories.begin(); it != categories.end(); it++) {
-		amount[*it] = amount[*it] - 1;
+		std::set<ItemCategory> categories = Item::Presets[item.lock()->Type()].categories;
+		for(std::set<ItemCategory>::iterator it = categories.begin(); it != categories.end(); it++) {
+			amount[*it] = amount[*it] - 1;
+		}
 	}
 }
 
@@ -537,4 +550,18 @@ int Stockpile::GetLimit(ItemCategory category) {
 
 void Stockpile::AcceptVisitor(ConstructionVisitor& visitor) {
 	visitor.Visit(this);
+}
+
+void Stockpile::Dismantle(Coordinate location) {
+	if (!Construction::Presets[type].permanent) {
+		if (Map::Inst()->GetConstruction(location.X(), location.Y()) == uid) {
+			Map::Inst()->SetConstruction(location.X(), location.Y(), -1);
+			Map::Inst()->SetBuildable(location.X(), location.Y(), true);
+			reserved.erase(location);
+			containers.erase(location);
+			colors.erase(location);
+		}
+
+		if (containers.empty()) Game::Inst()->RemoveConstruction(boost::static_pointer_cast<Construction>(shared_from_this()));
+	}
 }

@@ -30,5 +30,5 @@ if [ os.name ] = MACOSX {
 
 lib tcod
     : $(sources)
-    : <use>/libpng <use>/zlib
+    : <use>/libpng <use>/zlib <use>/sdl
 ;

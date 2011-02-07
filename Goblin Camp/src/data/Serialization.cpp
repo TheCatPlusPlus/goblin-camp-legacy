@@ -167,6 +167,7 @@ void Game::save(Archive & ar, const unsigned int version) const  {
 	ar & bloodList;
 	ar & fireList;
 	ar & spellList;
+	ar & age;
 }
 
 template<class Archive>
@@ -214,6 +215,7 @@ void Game::load(Archive & ar, const unsigned int version) {
 	if (version >= 1) {
 		ar & fireList;
 		ar & spellList;
+		ar & age;
 	}
 }
 
@@ -280,6 +282,9 @@ void NPC::save(Archive & ar, const unsigned int version) const {
 	ar & addedTasksToCurrentJob;
 	ar & Skills;
 	ar & hasMagicRangedAttacks;
+	ar & traits;
+	ar & damageDealt;
+	ar & damageReceived;
 }
 
 template<class Archive>
@@ -342,6 +347,9 @@ void NPC::load(Archive & ar, const unsigned int version) {
 
 	if (version >= 1) {
 		ar & hasMagicRangedAttacks;
+		ar & traits;
+		ar & damageDealt;
+		ar & damageReceived;
 	}
 
 	InitializeAIFunctions();
@@ -580,6 +588,8 @@ void StatusEffect::save(Archive & ar, const unsigned int version) const {
 	ar & resistanceChanges;
 	ar & damage;
 	ar & damageType;
+	ar & visible;
+	ar & negative;
 }
 
 template<class Archive>
@@ -600,6 +610,8 @@ void StatusEffect::load(Archive & ar, const unsigned int version) {
 			ar & temp;
 		} else if (version >= 1) {
 			ar & damageType;
+			ar & visible;
+			ar & negative;
 		}
 }
 
@@ -665,7 +677,7 @@ void Task::load(Archive & ar, const unsigned int version) {
 //
 // class Stockpile
 //
-BOOST_CLASS_VERSION(Stockpile, 0)
+BOOST_CLASS_VERSION(Stockpile, 1)
 
 template<class Archive>
 void Stockpile::save(Archive & ar, const unsigned int version) const {
@@ -676,7 +688,6 @@ void Stockpile::save(Archive & ar, const unsigned int version) const {
 	ar & capacity;
 	ar & amount;
 	ar & allowed;
-	ar & used;
 	ar & reserved;
 	ar & containers;
 	int colorCount = colors.size();
@@ -692,30 +703,31 @@ void Stockpile::save(Archive & ar, const unsigned int version) const {
 
 template<class Archive>
 void Stockpile::load(Archive & ar, const unsigned int version) {
+	ar & boost::serialization::base_object<Construction>(*this);
+	ar & symbol;
+	ar & a;
+	ar & b;
+	ar & capacity;
+	ar & amount;
+	ar & allowed;
 	if (version == 0) {
-		ar & boost::serialization::base_object<Construction>(*this);
-		ar & symbol;
-		ar & a;
-		ar & b;
-		ar & capacity;
-		ar & amount;
-		ar & allowed;
-		ar & used;
-		ar & reserved;
-		ar & containers;
-		int colorCount;
-		ar & colorCount;
-		for (int i = 0; i < colorCount; ++i) {
-			Coordinate location;
-			ar & location;
-			uint8 r, g, b;
-			ar & r;
-			ar & g;
-			ar & b;
-			colors.insert(std::pair<Coordinate, TCODColor>(location, TCODColor(r, g, b)));
-		}
-		ar & limits;
+		std::map<Coordinate, bool> temp;
+		ar & temp;
 	}
+	ar & reserved;
+	ar & containers;
+	int colorCount;
+	ar & colorCount;
+	for (int i = 0; i < colorCount; ++i) {
+		Coordinate location;
+		ar & location;
+		uint8 r, g, b;
+		ar & r;
+		ar & g;
+		ar & b;
+		colors.insert(std::pair<Coordinate, TCODColor>(location, TCODColor(r, g, b)));
+	}
+	ar & limits;
 }
 
 //
@@ -748,6 +760,7 @@ void Construction::save(Archive & ar, const unsigned int version) const {
 	ar & AllowedAmount;
 	ar & built;
 	ar & flammable;
+	ar & repairJob;
 }
 
 template<class Archive>
@@ -776,6 +789,7 @@ void Construction::load(Archive & ar, const unsigned int version) {
 	ar & built;
 	if (version >= 1) {
 		ar & flammable;
+		ar & repairJob;
 	}
 }
 

@@ -71,6 +71,7 @@ private:
 	int screenWidth, screenHeight;
 	Season season;
 	int time;
+	int age;
 	int orcCount, goblinCount;
 	unsigned int peacefulFaunaCount;
 	bool paused;
@@ -86,8 +87,10 @@ private:
 	std::list<std::pair<int, boost::function<void()> > > delays;
 
 	boost::shared_ptr<MapRenderer> renderer;
+	bool gameOver;
 public:
 	static Game* Inst();
+	~Game();
 	static bool LoadGame(const std::string&);
 	static bool SaveGame(const std::string&);
 	static void ToMainMenu(bool);
@@ -154,7 +157,9 @@ public:
 	unsigned int PeacefulFaunaCount() const;
 	void PeacefulFaunaCount(int);
 	void Hungerize(Coordinate);
+	void Thirstify(Coordinate);
 	void Tire(Coordinate);
+	void Badsleepify(Coordinate);
 
 	/*      CONSTRUCTIONS       CONSTRUCTIONS       CONSTRUCTIONS       */
 	static bool CheckPlacement(Coordinate, Coordinate, std::set<TileType> = std::set<TileType>());
@@ -170,6 +175,7 @@ public:
 	boost::weak_ptr<Construction> GetConstruction(int);
 	boost::weak_ptr<Construction> FindConstructionByTag(ConstructionTag, Coordinate closeTo=Coordinate(-1,-1));
 	void Damage(Coordinate);
+	void UpdateFarmPlotSeedAllowances(ItemType);
 
 	/*      ITEMS       ITEMS       ITEMS       */
 	int CreateItem(Coordinate, ItemType, bool stockpile = false,
@@ -241,4 +247,6 @@ public:
 
 	boost::shared_ptr<Spell> CreateSpell(Coordinate, int type);
 	std::list<boost::shared_ptr<Spell> > spellList;
+
+	int GetAge();
 };

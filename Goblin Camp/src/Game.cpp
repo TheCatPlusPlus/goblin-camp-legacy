@@ -61,6 +61,7 @@ screenWidth(0),
 	screenHeight(0),
 	season(EarlySpring),
 	time(0),
+	age(0),
 	orcCount(0),
 	goblinCount(0),
 	peacefulFaunaCount(0),
@@ -70,11 +71,19 @@ screenWidth(0),
 	safeMonths(9),
 	devMode(false),
 	events(boost::shared_ptr<Events>()),
+	gameOver(false),
 	camX(0),
-	camY(0)
+	camY(0),
+	buffer(0)
 {
 	for(int i = 0; i < 12; i++) {
 		marks[i] = Coordinate(-1, -1);
+	}
+}
+
+Game::~Game() {
+	if (buffer) {
+		delete buffer;
 	}
 }
 
@@ -308,8 +317,14 @@ int Game::CreateNPC(Coordinate target, NPCType type) {
 		}
 	}
 
-	if (boost::iequals(NPC::NPCTypeToString(type), "orc")) ++orcCount;
-	else if (boost::iequals(NPC::NPCTypeToString(type), "goblin")) ++goblinCount;
+	if (boost::iequals(NPC::NPCTypeToString(type), "orc")) {
+		++orcCount;
+		npc->AddTrait(FRESH);
+	}
+	else if (boost::iequals(NPC::NPCTypeToString(type), "goblin")) {
+		++goblinCount;
+		if (Random::Generate(2) == 0) npc->AddTrait(CHICKENHEART);
+	}
 	else if (NPC::Presets[type].tags.find("localwildlife") != NPC::Presets[type].tags.end()) ++peacefulFaunaCount;
 
 	if (NPC::Presets[type].tags.find("flying") != NPC::Presets[type].tags.end()) {
@@ -337,7 +352,6 @@ int Game::OrcCount() const { return orcCount; }
 void Game::OrcCount(int add) { orcCount += add; }
 int Game::GoblinCount() const { return goblinCount; }
 void Game::GoblinCount(int add) { goblinCount += add; }
-
 
 //Moves the entity to a valid walkable tile
 void Game::BumpEntity(int uid) {
@@ -531,7 +545,7 @@ void Game::DismantleConstruction(Coordinate a, Coordinate b) {
 			int construction = Map::Inst()->GetConstruction(x,y);
 			if (construction >= 0) {
 				if (instance->GetConstruction(construction).lock()) {
-					instance->GetConstruction(construction).lock()->Dismantle();
+					instance->GetConstruction(construction).lock()->Dismantle(Coordinate(x,y));
 				} else {
 					Map::Inst()->SetConstruction(x,y,-1);
 				}
@@ -743,12 +757,18 @@ void Game::Update() {
 
 		Map::Inst()->ShiftWind();
 
+		for (std::map<int, boost::shared_ptr<Construction> >::iterator cons = staticConstructionList.begin();
+			cons != staticConstructionList.end(); ++cons) { cons->second->SpawnRepairJob(); }
+		for (std::map<int, boost::shared_ptr<Construction> >::iterator cons = dynamicConstructionList.begin();
+			cons != dynamicConstructionList.end(); ++cons) { cons->second->SpawnRepairJob(); }
+
 		if (season < LateWinter) season = (Season)((int)season + 1);
 		else season = EarlySpring;
 
 		switch (season) {
 		case EarlySpring:
 			Announce::Inst()->AddMsg("Spring has begun");
+			++age;
 		case Spring:
 		case LateSpring:
 			SpawnTillageJobs();
@@ -895,7 +915,10 @@ void Game::Update() {
 		} else ++delit;
 	}
 
-	if (orcCount == 0 && goblinCount == 0) GameOver();
+	if (!gameOver && orcCount == 0 && goblinCount == 0) {
+		gameOver = true;
+		MessageBox::ShowMessageBox("All your orcs and goblins have died.", boost::bind(&Game::GameOver, Game::Inst()), "Main Menu", NULL, "Keep watching");
+	}
 
 	for (std::list<boost::weak_ptr<FireNode> >::iterator fireit = fireList.begin(); fireit != fireList.end();) {
 		if (boost::shared_ptr<FireNode> fire = fireit->lock()) {
@@ -1439,95 +1462,102 @@ void Game::CreateFilth(Coordinate pos) {
 }
 
 void Game::CreateFilth(Coordinate pos, int amount) {
-	boost::shared_ptr<WaterNode> water = Map::Inst()->GetWater(pos.X(), pos.Y()).lock();
+	if (pos.X() >= 0 && pos.X() < Map::Inst()->Width() && pos.Y() >= 0 && pos.Y() < Map::Inst()->Height()) {
+		int loops = -1;
+		while (amount > 0 && loops < 1000) {
+			++loops;
+			boost::shared_ptr<WaterNode> water = Map::Inst()->GetWater(pos.X(), pos.Y()).lock();
 
-	if (water) { //If water exists here just add the filth there, no need for filthnodes
-		water->AddFilth(amount);
-		return;
-	}
-
-	boost::weak_ptr<FilthNode> filth(Map::Inst()->GetFilth(pos.X(), pos.Y()));
-	if (!filth.lock()) { //No existing filth node so create one
-		boost::shared_ptr<FilthNode> newFilth(new FilthNode(pos.X(), pos.Y(), std::min(5, amount)));
-		amount -= 5;
-		filthList.push_back(boost::weak_ptr<FilthNode>(newFilth));
-		Map::Inst()->SetFilth(pos.X(), pos.Y(), newFilth);
-	} else {
-		int originalDepth = filth.lock()->Depth();
-		filth.lock()->Depth(std::min(5, filth.lock()->Depth() + amount));
-		amount -= 5 - originalDepth;
-	}
-	//If theres still remaining filth, it'll spill over according to flow
-	while (amount > 0) {
-		Coordinate flowTo = pos;
-		switch (Map::Inst()->GetFlow(pos.X(), pos.Y())) {
-		case NORTH:
-			flowTo.Y(flowTo.Y() - 1);
-			flowTo.X(flowTo.X() + Random::Generate(-1, 1));
-			break;
-
-		case NORTHEAST:
-			if (Random::GenerateBool()) {
-				flowTo.Y(flowTo.Y() - 1);
-				flowTo.X(flowTo.X() + Random::Generate(0, 1));
-			} else {
-				flowTo.Y(flowTo.Y() + Random::Generate(-1, 0));
-				flowTo.X(flowTo.X() + 1);
+			if (water) { //If water exists here just add the filth there, no need for filthnodes
+				water->AddFilth(amount);
+				return;
 			}
-			break;
 
-		case NORTHWEST:
-			if (Random::GenerateBool()) {
-				flowTo.Y(flowTo.Y() - 1);
-				flowTo.X(flowTo.X() - Random::Generate(0, 1));
+			boost::weak_ptr<FilthNode> filth(Map::Inst()->GetFilth(pos.X(), pos.Y()));
+			if (!filth.lock()) { //No existing filth node so create one
+				boost::shared_ptr<FilthNode> newFilth(new FilthNode(pos.X(), pos.Y(), std::min(5, amount)));
+				amount -= 5;
+				filthList.push_back(boost::weak_ptr<FilthNode>(newFilth));
+				Map::Inst()->SetFilth(pos.X(), pos.Y(), newFilth);
 			} else {
-				flowTo.Y(flowTo.Y() + Random::Generate(-1, 0));
-				flowTo.X(flowTo.X() - 1);
+				int originalDepth = filth.lock()->Depth();
+				filth.lock()->Depth(std::min(5, filth.lock()->Depth() + amount));
+				amount -= (5 - originalDepth);
 			}
-			break;
+			//If theres still remaining filth, it'll spill over according to flow
+			if (amount > 0) {
+				Coordinate flowTo = pos;
+				int diff = std::max(1, loops / 100);
+				switch (Map::Inst()->GetFlow(pos.X(), pos.Y())) {
+				case NORTH:
+					flowTo.Y(flowTo.Y() - diff);
+					flowTo.X(flowTo.X() + Random::Generate(-diff, diff));
+					break;
 
-		case SOUTH:
-			flowTo.Y(flowTo.Y() + 1);
-			flowTo.X(flowTo.X() + Random::Generate(-1, 1));
-			break;
+				case NORTHEAST:
+					if (Random::GenerateBool()) {
+						flowTo.Y(flowTo.Y() - diff);
+						flowTo.X(flowTo.X() + Random::Generate(0, diff));
+					} else {
+						flowTo.Y(flowTo.Y() + Random::Generate(-diff, 0));
+						flowTo.X(flowTo.X() + diff);
+					}
+					break;
 
-		case SOUTHEAST:
-			if (Random::GenerateBool()) {
-				flowTo.Y(flowTo.Y() + 1);
-				flowTo.X(flowTo.X() + Random::Generate(0, 1));
-			} else {
-				flowTo.Y(flowTo.Y() + Random::Generate(1, 0));
-				flowTo.X(flowTo.X() + 1);
+				case NORTHWEST:
+					if (Random::GenerateBool()) {
+						flowTo.Y(flowTo.Y() - diff);
+						flowTo.X(flowTo.X() - Random::Generate(0, diff));
+					} else {
+						flowTo.Y(flowTo.Y() + Random::Generate(-diff, 0));
+						flowTo.X(flowTo.X() - diff);
+					}
+					break;
+
+				case SOUTH:
+					flowTo.Y(flowTo.Y() + diff);
+					flowTo.X(flowTo.X() + Random::Generate(-diff, diff));
+					break;
+
+				case SOUTHEAST:
+					if (Random::GenerateBool()) {
+						flowTo.Y(flowTo.Y() + diff);
+						flowTo.X(flowTo.X() + Random::Generate(0, diff));
+					} else {
+						flowTo.Y(flowTo.Y() + Random::Generate(0, diff));
+						flowTo.X(flowTo.X() + diff);
+					}
+					break;
+
+				case SOUTHWEST:
+					if (Random::GenerateBool()) {
+						flowTo.Y(flowTo.Y() + diff);
+						flowTo.X(flowTo.X() + Random::Generate(0, diff));
+					} else {
+						flowTo.Y(flowTo.Y() + Random::Generate(0, diff));
+						flowTo.X(flowTo.X() + diff);
+					}
+					break;
+
+				case WEST:
+					flowTo.Y(flowTo.Y() + Random::Generate(-diff, diff));
+					flowTo.X(flowTo.X() - diff);
+					break;
+
+				case EAST:
+					flowTo.Y(flowTo.Y() + Random::Generate(-diff, diff));
+					flowTo.X(flowTo.X() + diff);
+					break;
+
+				default: break;
+				}
+				while (flowTo == pos || (flowTo.X() < 0 || flowTo.X() >= Map::Inst()->Width() ||
+					flowTo.Y() < 0 || flowTo.Y() >= Map::Inst()->Height())) {
+						flowTo = Coordinate(pos.X() + Random::Generate(-diff, diff), pos.Y() + Random::Generate(-diff, diff));
+				}
+				pos = flowTo;
 			}
-			break;
-
-		case SOUTHWEST:
-			if (Random::GenerateBool()) {
-				flowTo.Y(flowTo.Y() + 1);
-				flowTo.X(flowTo.X() + Random::Generate(0, 1));
-			} else {
-				flowTo.Y(flowTo.Y() + Random::Generate(1, 0));
-				flowTo.X(flowTo.X() + 1);
-			}
-			break;
-
-		case WEST:
-			flowTo.Y(flowTo.Y() + Random::Generate(-1, 1));
-			flowTo.X(flowTo.X() - 1);
-			break;
-
-		case EAST:
-			flowTo.Y(flowTo.Y() + Random::Generate(-1, 1));
-			flowTo.X(flowTo.X() + 1);
-			break;
-
-		default: break;
 		}
-		while (flowTo == pos) { //Incase the tile's flow is NODIRECTION
-			flowTo = Coordinate(pos.X() - 1 + Random::Generate(2), pos.Y() - 1 + Random::Generate(2));
-		}
-		Game::CreateFilth(flowTo, 1);
-		--amount;
 	}
 }
 
@@ -1555,8 +1585,6 @@ int Game::CharWidth() const { return charWidth; }
 
 void Game::RemoveNPC(boost::weak_ptr<NPC> wnpc) {
 	if (boost::shared_ptr<NPC> npc = wnpc.lock()) {
-		if (boost::iequals(npc->name, "orc")) --orcCount;
-		else if (boost::iequals(npc->name, "goblin")) --goblinCount;
 		npcList.erase(npc->uid);
 	}
 }
@@ -1694,6 +1722,7 @@ void Game::Reset() {
 	renderer->PreparePrefabs();
 	fireList.clear();
 	spellList.clear();
+	gameOver = false;
 }
 
 NPCType Game::GetRandomNPCTypeByTag(std::string tag) {
@@ -1714,8 +1743,8 @@ void Game::CenterOn(Coordinate target) {
 }
 
 void Game::MoveCam(float x, float y) {
-	camX = std::min(std::max(x + camX, 0.0f), Map::Inst()->Width() + 1.0f);
-	camY = std::min(std::max(y + camY, 0.0f), Map::Inst()->Height() + 1.0f);
+	camX = std::min(std::max(x * renderer->ScrollRate() + camX, 0.0f), Map::Inst()->Width() + 1.0f);
+	camY = std::min(std::max(y * renderer->ScrollRate() + camY, 0.0f), Map::Inst()->Height() + 1.0f);
 }
 
 void Game::SetMark(int i) {
@@ -1959,7 +1988,7 @@ void Game::Tire(Coordinate pos) {
 				boost::shared_ptr<NPC> npc;
 				if (npcList.find(*npci) != npcList.end()) npc = npcList[*npci];
 				if (npc) {
-					npc->weariness = (int)(WEARY_THRESHOLD * 1.5);
+					npc->weariness = (int)(WEARY_THRESHOLD-1);
 				}
 		}
 	}
@@ -1970,7 +1999,6 @@ void Game::AddDelay(int delay, boost::function<void()> callback) {
 }
 
 void Game::GameOver() {
-	MessageBox::ShowMessageBox("All your orcs and goblins have died.");
 	running = false;
 }
 
@@ -1988,7 +2016,6 @@ void Game::CreateFire(Coordinate pos, int temperature) {
 	}
 }
 
-/* Placeholder code before proper spells */
 boost::shared_ptr<Spell> Game::CreateSpell(Coordinate pos, int type) {
 	boost::shared_ptr<Spell> newSpell(new Spell(pos, type));
 	spellList.push_back(newSpell);
@@ -2009,4 +2036,45 @@ void Game::StartFire(Coordinate pos) {
 	fireJob->tasks.push_back(Task(STARTFIRE, pos));
 	fireJob->AddMapMarker(MapMarker(FLASHINGMARKER, 'F', pos, -1, TCODColor::red));
 	JobManager::Inst()->AddJob(fireJob);
+}
+
+int Game::GetAge() { return age; }
+
+void Game::UpdateFarmPlotSeedAllowances(ItemType type) {
+	for (std::set<ItemCategory>::iterator cati = Item::Presets[type].categories.begin(); cati != Item::Presets[type].categories.end();
+		++cati) {
+			if (boost::iequals(Item::Categories[*cati].name, "seed")) {
+				for (std::map<int, boost::shared_ptr<Construction> >::iterator dynamicConsi = dynamicConstructionList.begin();
+					dynamicConsi != dynamicConstructionList.end(); ++dynamicConsi) {
+						if (dynamicConsi->second->HasTag(FARMPLOT)) {
+							boost::static_pointer_cast<FarmPlot>(dynamicConsi->second)->AllowedSeeds()->insert(std::pair<ItemType,bool>(type, false));
+						}
+				}
+			}
+	}
+}
+
+void Game::Thirstify(Coordinate pos) {
+	if (pos.X() >= 0 && pos.X() < Map::Inst()->Width() && pos.Y() >= 0 && pos.Y() < Map::Inst()->Height()) {
+		for (std::set<int>::iterator npci = Map::Inst()->NPCList(pos.X(), pos.Y())->begin();
+			npci != Map::Inst()->NPCList(pos.X(), pos.Y())->end(); ++npci) {
+				boost::shared_ptr<NPC> npc;
+				if (npcList.find(*npci) != npcList.end()) npc = npcList[*npci];
+				if (npc) {
+					npc->thirst = THIRST_THRESHOLD + 500;
+				}
+		}
+	}
+}
+void Game::Badsleepify(Coordinate pos) {
+	if (pos.X() >= 0 && pos.X() < Map::Inst()->Width() && pos.Y() >= 0 && pos.Y() < Map::Inst()->Height()) {
+		for (std::set<int>::iterator npci = Map::Inst()->NPCList(pos.X(), pos.Y())->begin();
+			npci != Map::Inst()->NPCList(pos.X(), pos.Y())->end(); ++npci) {
+				boost::shared_ptr<NPC> npc;
+				if (npcList.find(*npci) != npcList.end()) npc = npcList[*npci];
+				if (npc) {
+					npc->AddEffect(BADSLEEP);
+				}
+		}
+	}
 }

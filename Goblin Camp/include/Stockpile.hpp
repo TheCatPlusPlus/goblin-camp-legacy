@@ -44,7 +44,6 @@ protected:
 	int capacity;
 	std::map<ItemCategory, int> amount;
 	std::map<ItemCategory, bool> allowed;
-	std::map<Coordinate, bool> used;
 	std::map<Coordinate, bool> reserved;
 	std::map<Coordinate, boost::shared_ptr<Container> > containers;
 	std::map<Coordinate, TCODColor> colors;
@@ -64,7 +63,7 @@ public:
 	Coordinate FreePosition();
 	void ReserveSpot(Coordinate, bool, ItemType);
 	boost::weak_ptr<Container> Storage(Coordinate);
-	void SwitchAllowed(ItemCategory, bool childrenAlso = true);
+	void SwitchAllowed(ItemCategory, bool childrenAlso = true, bool countParentsOnly = false);
 	void SetAllAllowed(bool);
 	virtual void GetTooltip(int x, int y, Tooltip *tooltip);
 	void ItemAdded(boost::weak_ptr<Item>);
@@ -74,4 +73,5 @@ public:
 	void AdjustLimit(ItemCategory, int);
 	int GetLimit(ItemCategory);
 	virtual void AcceptVisitor(ConstructionVisitor& visitor);
+	virtual void Dismantle(Coordinate pos=Coordinate(-1,-1));
 };

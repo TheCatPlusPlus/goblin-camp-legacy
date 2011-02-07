@@ -241,13 +241,13 @@ Menu* Menu::DevMenu() {
 		devMenu->AddChoice(MenuChoice("Create item", boost::bind(UI::ChooseCreateItem)));
 
 		boost::function<bool(Coordinate, Coordinate)> checkTree = boost::bind(Game::CheckTree, _1, Coordinate(1,1));
-		boost::function<void(Coordinate)> call = boost::bind(&Game::CreateFilth, Game::Inst(), _1, 10);
+		boost::function<void(Coordinate)> call = boost::bind(&Game::CreateFilth, Game::Inst(), _1, 100);
 		devMenu->AddChoice(MenuChoice("Create filth", boost::bind(UI::ChooseNormalPlacement, call, checkTree, '~')));
 		
 		call = boost::bind(&Game::CreateWater, Game::Inst(), _1);
 		devMenu->AddChoice(MenuChoice("Create water", boost::bind(UI::ChooseNormalPlacement, call, checkTree, '~')));
 		
-		call = boost::bind(&Map::Corrupt, Map::Inst(), _1, 2000);
+		call = boost::bind(&Map::Corrupt, Map::Inst(), _1, 500000);
 		devMenu->AddChoice(MenuChoice("Corrupt", boost::bind(UI::ChooseNormalPlacement, call, checkTree, 'C')));
 
 		devMenu->AddChoice(MenuChoice("Naturify world", boost::bind(UI::ChooseNaturify)));
@@ -270,6 +270,11 @@ Menu* Menu::DevMenu() {
 
 		call = boost::bind(&Game::CreateDitch, Game::Inst(), _1);
 		devMenu->AddChoice(MenuChoice("Dig", boost::bind(UI::ChooseABPlacement, call, checkTree, '_')));
+
+		call = boost::bind(&Game::Thirstify, Game::Inst(), _1);
+		devMenu->AddChoice(MenuChoice("Thirstify", boost::bind(UI::ChooseNormalPlacement, call, checkTree, 'T')));
+		call = boost::bind(&Game::Badsleepify, Game::Inst(), _1);
+		devMenu->AddChoice(MenuChoice("Badsleepify", boost::bind(UI::ChooseNormalPlacement, call, checkTree, 'T')));
 	}
 	return devMenu;
 }

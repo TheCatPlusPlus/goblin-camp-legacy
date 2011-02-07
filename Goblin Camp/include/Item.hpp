@@ -38,6 +38,14 @@ public:
 	std::string name;
 	std::string GetName();
 	ItemCategory parent;
+	inline bool operator==(const ItemCat& other) const {
+		return (flammable == other.flammable &&
+			name == other.name &&
+			parent == other.parent);
+	}
+	inline bool operator!=(const ItemCat& other) const {
+		return !(operator==(other));
+	}
 };
 
 struct ItemPreset {
@@ -68,6 +76,8 @@ struct ItemPreset {
 	int condition;
 	std::string fallbackGraphicsSet;
 	int graphicsHint;
+	std::vector<std::pair<StatusEffectType, int> > addsEffects;
+	std::vector<std::pair<StatusEffectType, int> > removesEffects;
 };
 
 class Item : public Entity {
@@ -114,9 +124,13 @@ public:
 
 	static void LoadPresets(std::string);
 	static void ResolveContainers();
+	static void UpdateEffectItems();
 
 	static std::vector<ItemCat> Categories;
+	static std::vector<ItemCat> ParentCategories;
 	static std::vector<ItemPreset> Presets;
+	static std::multimap<StatusEffectType, ItemType> EffectRemovers;
+	static std::multimap<StatusEffectType, ItemType> GoodEffectAdders;
 
 	virtual ~Item();
 

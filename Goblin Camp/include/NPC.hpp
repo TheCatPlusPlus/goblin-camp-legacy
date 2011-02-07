@@ -46,9 +46,12 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 
 typedef int NPCType;
 
-enum AiThink {
-	AINOTHING,
-	AIMOVE
+enum Trait {
+	FRESH,
+	CHICKENHEART,
+	VETERAN,
+	BOSS,
+	CRACKEDSKULL
 };
 
 enum Skill {
@@ -187,10 +190,15 @@ private:
 	Coordinate threatLocation;
 	bool seenFire;
 
+	std::set<Trait> traits;
+	int damageDealt, damageReceived;
+	bool statusEffectsChanged;
+
+	void UpdateHealth();
 public:
 	~NPC();
 	SkillSet Skills;
-	AiThink Think();
+	void Think();
 	void Update();
 	void Draw(Coordinate, TCODConsole*);
 	virtual void GetTooltip(int x, int y, Tooltip *tooltip);
@@ -267,6 +275,13 @@ public:
 
 	static unsigned int pathingThreadCount;
 	static boost::mutex threadCountMutex;
+
+	void AddTrait(Trait);
+	void RemoveTrait(Trait);
+	bool HasTrait(Trait);
+
+	void GoBerserk();
+	void ApplyEffects(boost::shared_ptr<Item>);
 };
 
 void tFindPath(TCODPath*, int, int, int, int, boost::mutex*, bool*, bool*, bool);

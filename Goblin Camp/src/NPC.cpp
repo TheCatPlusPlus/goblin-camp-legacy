@@ -94,6 +94,10 @@ NPC::NPC(Coordinate pos, boost::function<bool(boost::shared_ptr<NPC>)> findJob,
 	hasMagicRangedAttacks(false),
 	threatLocation(Coordinate(-1,-1)),
 	seenFire(false),
+	traits(std::set<Trait>()),
+	damageDealt(0),
+	damageReceived(0),
+	statusEffectsChanged(false),
 	FindJob(findJob),
 	React(react),
 	escaped(false)
@@ -187,6 +191,19 @@ void NPC::TaskFinished(TaskResult result, std::string msg) {
 		}
 	}
 	taskBegun = false;
+	run = true;
+
+	//If we're wielding a container (ie. a tool) spill it's contents
+	if (mainHand.lock() && boost::dynamic_pointer_cast<Container>(mainHand.lock())) {
+		boost::shared_ptr<Container> cont(boost::static_pointer_cast<Container>(mainHand.lock()));
+		if (cont->ContainsWater() > 0) {
+			Game::Inst()->CreateWater(Position(), cont->ContainsWater());
+			cont->RemoveWater(cont->ContainsWater());
+		} else if (cont->ContainsFilth() > 0) {
+			Game::Inst()->CreateFilth(Position(), cont->ContainsFilth());
+			cont->RemoveFilth(cont->ContainsFilth());
+		}
+	}
 }
 
 void NPC::HandleThirst() {
@@ -234,7 +251,7 @@ void NPC::HandleHunger() {
 	Coordinate tmpCoord;
 	bool found = false;
 
-	if (hunger > 48000 && jobs.front()->name.find("Eat") == std::string::npos) { //Starving and doing something else
+	if (hunger > 48000 && !jobs.empty() &&  jobs.front()->name.find("Eat") == std::string::npos) { //Starving and doing something else
 		TaskFinished(TASKFAILNONFATAL);
 	}
 		
@@ -283,6 +300,7 @@ void NPC::HandleWeariness() {
 	bool found = false;
 	for (std::deque<boost::shared_ptr<Job> >::iterator jobIter = jobs.begin(); jobIter != jobs.end(); ++jobIter) {
 		if ((*jobIter)->name.find("Sleep") != std::string::npos) found = true;
+		else if ((*jobIter)->name.find("Get rid of") != std::string::npos) found = true;
 	}
 	if (!found) {
 		boost::weak_ptr<Construction> wbed = Game::Inst()->FindConstructionByTag(BED, Position());
@@ -320,6 +338,13 @@ void NPC::Update() {
 		}
 	}
 
+	if (Random::Generate(UPDATES_PER_SECOND) == 0) { //Recalculate bulk once a second, items may get unexpectedly destroyed
+		bulk = 0;
+		for (std::set<boost::weak_ptr<Item> >::iterator itemi = inventory->begin(); itemi != inventory->end(); ++itemi) {
+			if (itemi->lock())
+				bulk += itemi->lock()->GetBulk();
+		}
+	}
 	if (!HasEffect(FLYING) && effectiveStats[MOVESPEED] > 0) effectiveStats[MOVESPEED] = std::max(1, effectiveStats[MOVESPEED]-Map::Inst()->GetMoveModifier(x,y));
 	effectiveStats[MOVESPEED] = std::max(1, effectiveStats[MOVESPEED]-bulk);
 
@@ -344,7 +369,7 @@ void NPC::Update() {
 
 		if (weariness >= WEARY_THRESHOLD) { 
 			AddEffect(DROWSY);
-			HandleWeariness();
+			if (weariness > WEARY_THRESHOLD) HandleWeariness(); //Give the npc a chance to find a sleepiness curing item
 		} else RemoveEffect(DROWSY);
 	}
 
@@ -353,6 +378,7 @@ void NPC::Update() {
 			boost::shared_ptr<Construction> construct = Game::Inst()->GetConstruction(Map::Inst()->GetConstruction(x,y)).lock();
 			if (water->Depth() > WALKABLE_WATER_DEPTH && (!construct || !construct->HasTag(BRIDGE) || !construct->Built())) {
 				AddEffect(SWIM);
+				RemoveEffect(BURNING);
 			} else { RemoveEffect(SWIM); }
 		} else { RemoveEffect(SWIM); }
 	}
@@ -361,14 +387,35 @@ void NPC::Update() {
 		attacki->Update();
 	}
 
-	if (Random::Generate(UPDATES_PER_SECOND - 1) == 0 && health < maxHealth) ++health;
 	if (faction == 0 && Random::Generate(MONTH_LENGTH - 1) == 0) Game::Inst()->CreateFilth(Position());
 
 	if (carried.lock()) {
 		AddEffect(StatusEffect(CARRYING, carried.lock()->GetGraphic(), carried.lock()->Color()));
 	} else RemoveEffect(CARRYING);
 
-	if (health <= 0) Kill();
+	if (HasTrait(CRACKEDSKULL) && Random::Generate(MONTH_LENGTH * 6) == 0) GoBerserk();
+	if (HasEffect(BURNING)) {
+		if (Random::Generate(UPDATES_PER_SECOND * 3) == 0) {
+			boost::shared_ptr<Spell> spark = Game::Inst()->CreateSpell(Position(), Spell::StringToSpellType("spark"));
+			spark->CalculateFlightPath(Position()+Coordinate(Random::Generate(-1,1),Random::Generate(-1,1)), 50, GetHeight());
+		}
+		if (!HasEffect(RAGE) && (jobs.empty() || jobs.front()->name != "Jump into water")) {
+			if (Random::Generate(UPDATES_PER_SECOND) == 0) {
+				RemoveEffect(PANIC);
+				while (!jobs.empty()) TaskFinished(TASKFAILFATAL);
+				boost::shared_ptr<Job> jumpJob(new Job("Jump into water"));
+				jumpJob->internal = true;
+				Coordinate waterPos = Game::Inst()->FindWater(Position());
+				if (waterPos.X() != -1) {
+					jumpJob->tasks.push_back(Task(MOVE, waterPos));
+					jobs.push_back(jumpJob);
+				}
+			} else if (!coward && boost::iequals(NPC::NPCTypeToString(type), "orc") && Random::Generate(2) == 0) {RemoveEffect(PANIC); GoBerserk();}
+			else {AddEffect(PANIC);}
+		}
+	}
+
+	UpdateHealth();
 }
 
 void NPC::UpdateStatusEffects() {
@@ -379,7 +426,7 @@ void NPC::UpdateStatusEffects() {
 		effectiveResistances[i] = baseResistances[i];
 	}
 	++statusGraphicCounter;
-	for (std::list<StatusEffect>::iterator statusEffectI = statusEffects.begin(); statusEffectI != statusEffects.end(); ++statusEffectI) {
+	for (std::list<StatusEffect>::iterator statusEffectI = statusEffects.begin(); statusEffectI != statusEffects.end();) {
 		//Apply effects to stats
 		for (int i = 0; i < STAT_COUNT; ++i) {
 			effectiveStats[i] = (int)(effectiveStats[i] * statusEffectI->statChanges[i]);
@@ -388,7 +435,7 @@ void NPC::UpdateStatusEffects() {
 			effectiveResistances[i] = (int)(effectiveResistances[i] * statusEffectI->resistanceChanges[i]);
 		}
 
-		if (statusEffectI->damage.second > 0 && --statusEffectI->damage.first <= 0) {
+		if (statusEffectI->damage.second != 0 && --statusEffectI->damage.first <= 0) {
 			statusEffectI->damage.first = UPDATES_PER_SECOND;
 			TCOD_dice_t dice;
 			dice.addsub = (float)statusEffectI->damage.second;
@@ -401,6 +448,36 @@ void NPC::UpdateStatusEffects() {
 			Damage(&attack);
 		}
 
+		if (faction == 0 && statusEffectI->negative && !HasEffect(SLEEPING) && (statusEffectsChanged || Random::Generate(MONTH_LENGTH) == 0)) {
+			statusEffectsChanged = false;
+			bool removalJobFound = false;
+			for (std::deque<boost::shared_ptr<Job> >::iterator jobi = jobs.begin(); jobi != jobs.end(); ++jobi) {
+				if ((*jobi)->name.find("Get rid of") != std::string::npos) {
+					removalJobFound = true;
+					break;
+				}
+			}
+			if (!removalJobFound && Item::EffectRemovers.find((StatusEffectType)statusEffectI->type) != Item::EffectRemovers.end()) {
+				boost::shared_ptr<Item> fixItem;
+				for (std::multimap<StatusEffectType, ItemType>::iterator fixi = Item::EffectRemovers.equal_range((StatusEffectType)statusEffectI->type).first;
+					fixi != Item::EffectRemovers.equal_range((StatusEffectType)statusEffectI->type).second && !fixItem; ++fixi) {
+						fixItem = Game::Inst()->FindItemByTypeFromStockpiles(fixi->second, Position()).lock();
+				}
+				if (fixItem) {
+					boost::shared_ptr<Job> rEffJob(new Job("Get rid of "+statusEffectI->name));
+					rEffJob->internal = true;
+					rEffJob->ReserveEntity(fixItem);
+					rEffJob->tasks.push_back(Task(MOVE, fixItem->Position()));
+					rEffJob->tasks.push_back(Task(TAKE, fixItem->Position(), fixItem));
+					if (fixItem->IsCategory(Item::StringToItemCategory("drink")))
+						rEffJob->tasks.push_back(Task(DRINK));
+					else
+						rEffJob->tasks.push_back(Task(EAT));
+					jobs.push_back(rEffJob);
+				}
+			}
+		}
+
 		//Remove the statuseffect if its cooldown has run out
 		if (statusEffectI->cooldown > 0 && --statusEffectI->cooldown == 0) {
 			if (statusEffectI == statusEffectIterator) {
@@ -409,18 +486,30 @@ void NPC::UpdateStatusEffects() {
 			}
 			statusEffectI = statusEffects.erase(statusEffectI);
 			if (statusEffectIterator == statusEffects.end()) statusEffectIterator = statusEffects.begin();
-		}
+		} else ++statusEffectI;
 	}
 	
 	if (statusGraphicCounter > 10) {
 		statusGraphicCounter = 0;
 		if (statusEffectIterator != statusEffects.end()) ++statusEffectIterator;
 		else statusEffectIterator = statusEffects.begin();
-	}
 
+		if (statusEffectIterator != statusEffects.end() && !statusEffectIterator->visible) {
+			std::list<StatusEffect>::iterator oldIterator = statusEffectIterator;
+			++statusEffectIterator;
+			while (statusEffectIterator != oldIterator) {
+				if (statusEffectIterator != statusEffects.end()) {
+					if (statusEffectIterator->visible) break;
+					++statusEffectIterator;
+				}
+				else statusEffectIterator = statusEffects.begin();
+			}
+			if (statusEffectIterator != statusEffects.end() && !statusEffectIterator->visible) statusEffectIterator = statusEffects.end();
+		}
+	}
 }
 
-AiThink NPC::Think() {
+void NPC::Think() {
 	Coordinate tmpCoord;
 	int tmp;
 	
@@ -434,7 +523,7 @@ AiThink NPC::Think() {
 		TaskFinished(TASKFAILFATAL, "Flying through the air");
 		JobManager::Inst()->NPCNotWaiting(uid);
 	}
-
+	
 	while (timeCount > UPDATES_PER_SECOND) {
 		if (Random::GenerateBool()) React(boost::static_pointer_cast<NPC>(shared_from_this()));
 
@@ -607,9 +696,10 @@ MOVENEARend:
 					timer = boost::static_pointer_cast<OrganicItem>(carried.lock())->Nutrition();
 					inventory->RemoveItem(carried);
 					bulk -= carried.lock()->GetBulk();
+					ApplyEffects(carried.lock());
 					Game::Inst()->RemoveItem(carried);
 					carried = boost::weak_ptr<Item>();
-				} else { //Drink from a water tile
+				} else if (timer == 0) { //Drink from a water tile
 					if (std::abs((signed int)x - currentTarget().X()) <= 1 &&
 						std::abs((signed int)y - currentTarget().Y()) <= 1) {
 							if (boost::shared_ptr<WaterNode> water = Map::Inst()->GetWater(currentTarget().X(), currentTarget().Y()).lock()) {
@@ -640,10 +730,12 @@ MOVENEARend:
 			case EAT:
 				if (carried.lock()) {
 					//Set the nutrition to the timer variable
-					timer = boost::static_pointer_cast<OrganicItem>(carried.lock())->Nutrition();
+					if (boost::dynamic_pointer_cast<OrganicItem>(carried.lock())) {
+						timer = boost::static_pointer_cast<OrganicItem>(carried.lock())->Nutrition();
+					} else timer = 100;
 					inventory->RemoveItem(carried);
 					bulk -= carried.lock()->GetBulk();
-
+					ApplyEffects(carried.lock());
 					for (std::list<ItemType>::iterator fruiti = Item::Presets[carried.lock()->Type()].fruits.begin(); fruiti != Item::Presets[carried.lock()->Type()].fruits.end(); ++fruiti) {
 						Game::Inst()->CreateItem(Position(), *fruiti, true);
 					}
@@ -836,19 +928,19 @@ CONTINUEEAT:
 					y == 0 || y == Map::Inst()->Height()-1) {
 						//We are at the edge, escape!
 						Escape();
-						return AIMOVE;
+						return;
 				}
 
 				//Find the closest edge and change into a MOVE task and a new FLEEMAP task
 				//Unfortunately this assumes that FLEEMAP is the last task in a job,
 				//which might not be.
 				tmp = std::abs((signed int)x - Map::Inst()->Width() / 2);
-				if (tmp > std::abs((signed int)y - Map::Inst()->Height() / 2)) {
+				if (tmp < std::abs((signed int)y - Map::Inst()->Height() / 2)) {
 					currentJob().lock()->tasks[taskIndex] = Task(MOVE, Coordinate(x, 
 						(y < (unsigned int)Map::Inst()->Height() / 2) ? 0 : Map::Inst()->Height()-1));
 				} else {
 					currentJob().lock()->tasks[taskIndex] = Task(MOVE, 
-						Coordinate(((unsigned int)Map::Inst()->Width() / 2) ? 0 : Map::Inst()->Width()-1, 
+						Coordinate((x < (unsigned int)Map::Inst()->Width() / 2) ? 0 : Map::Inst()->Width()-1, 
 						y));
 				}
 				currentJob().lock()->tasks.push_back(Task(FLEEMAP));
@@ -1123,10 +1215,36 @@ CONTINUEEAT:
 				}
 				break;
 
+			case REPAIR:
+				if (currentEntity().lock() && boost::dynamic_pointer_cast<Construction>(currentEntity().lock())) {
+					tmp = boost::static_pointer_cast<Construction>(currentEntity().lock())->Repair();
+					AddEffect(WORKING);
+					if (tmp >= 100) {
+						if (carried.lock()) { //Repairjobs usually require some material
+							inventory->RemoveItem(carried);
+							bulk -= carried.lock()->GetBulk();
+							Game::Inst()->RemoveItem(carried);
+							carried.reset();
+						}
+						TaskFinished(TASKSUCCESS);
+					} else if (tmp < 0) {
+						TaskFinished(TASKFAILFATAL, "(USE)Can not use (tmp<0)"); break;
+					}
+				} else { TaskFinished(TASKFAILFATAL, "(USE)Attempted to use non-construct"); break; }
+				break;
+
 			default: TaskFinished(TASKFAILFATAL, "*BUG*Unknown task*BUG*"); break;
 			}
 		} else {
-			if (HasEffect(PANIC)) {
+			if (HasEffect(DRUNK)) {
+				JobManager::Inst()->NPCNotWaiting(uid);
+				boost::shared_ptr<Job> drunkJob(new Job("Huh?"));
+				drunkJob->internal = true;
+				run = false;
+				drunkJob->tasks.push_back(Task(MOVENEAR, Position()));
+				jobs.push_back(drunkJob);
+				if (Random::Generate(50) == 0) GoBerserk();
+			} else	if (HasEffect(PANIC)) {
 				JobManager::Inst()->NPCNotWaiting(uid);
 				if (jobs.empty() && threatLocation.X() != 1 && threatLocation.Y() != -1) {
 					boost::shared_ptr<Job> fleeJob(new Job("Flee"));
@@ -1158,7 +1276,7 @@ CONTINUEEAT:
 		}
 	}
 
-	return AINOTHING;
+	return;
 }
 
 void NPC::StartJob(boost::shared_ptr<Job> job) {
@@ -1454,10 +1572,23 @@ bool NPC::JobManagerFinder(boost::shared_ptr<NPC> npc) {
 void NPC::PlayerNPCReact(boost::shared_ptr<NPC> npc) {
 	if (npc->coward) {
 		npc->ScanSurroundings();
+		
+		if (npc->HasTrait(CHICKENHEART) && npc->seenFire && (npc->jobs.empty() || npc->jobs.front()->name != "Aaaaaaaah!!")) {
+			while (!npc->jobs.empty()) npc->TaskFinished(TASKFAILNONFATAL);
+			boost::shared_ptr<Job> runAroundLikeAHeadlessChickenJob(new Job("Aaaaaaaah!!"));
+			for (int i = 0; i < 30; ++i)
+				runAroundLikeAHeadlessChickenJob->tasks.push_back(Task(MOVE, npc->Position() + Coordinate(Random::Generate(-2, 2), Random::Generate(-2, 2))));
+			runAroundLikeAHeadlessChickenJob->internal = true;
+			npc->jobs.push_back(runAroundLikeAHeadlessChickenJob);
+			npc->run = true;
+			npc->AddEffect(PANIC);
+			return;
+		}
+
 		for (std::list<boost::weak_ptr<NPC> >::iterator npci = npc->nearNpcs.begin(); npci != npc->nearNpcs.end(); ++npci) {
-			if (( (npci->lock()->GetFaction() != npc->faction) || 
-				(npci->lock() == npc->aggressor.lock()) && npci->lock()->aggressive) || 
-				npc->seenFire) {
+			if ((npci->lock()->GetFaction() != npc->faction && npci->lock()->aggressive) || 
+				npci->lock() == npc->aggressor.lock() || 
+				(npc->seenFire && (npc->jobs.empty() || !boost::iequals(npc->jobs.front()->name,"Pour water")))) {
 				JobManager::Inst()->NPCNotWaiting(npc->uid);
 				while (!npc->jobs.empty()) npc->TaskFinished(TASKFAILNONFATAL);
 				npc->AddEffect(PANIC);
@@ -1587,6 +1718,7 @@ void NPC::AddEffect(StatusEffectType effect) {
 	}
 
 	statusEffects.push_back(StatusEffect(effect));
+	statusEffectsChanged = true;
 }
 
 void NPC::RemoveEffect(StatusEffectType effect) {
@@ -1628,27 +1760,15 @@ void NPC::Hit(boost::weak_ptr<Entity> target, bool careful) {
 				if (npc) {
 					//First check if the target dodges the attack
 					if (Random::Generate(99) < npc->effectiveStats[DODGE]) {
-	#ifdef DEBUG
-						std::cout<<npc->name<<"("<<npc->uid<<") dodged\n";
-	#endif
 						continue;
 					}
 				}
 
 				Attack attack = *attacki;
-#ifdef DEBUG
-				std::cout<<"attack.addsub: "<<attack.Amount().addsub<<"\n";
-#endif
 
 				if (attack.Type() == DAMAGE_WIELDED) {
-#ifdef DEBUG
-					std::cout<<"Wielded attack\n";
-#endif
 					GetMainHandAttack(attack);
 				}
-#ifdef DEBUG
-				std::cout<<"attack.addsub after: "<<attack.Amount().addsub<<"\n";
-#endif
 				if (npc && !careful && effectiveStats[STRENGTH] >= npc->effectiveStats[NPCSIZE]) {
 					if (attack.Type() == DAMAGE_BLUNT || Random::GenerateBool()) {
 						Coordinate tar;
@@ -1659,8 +1779,12 @@ void NPC::Hit(boost::weak_ptr<Entity> target, bool careful) {
 					}
 				}
 
-				if (npc) npc->Damage(&attack, boost::static_pointer_cast<NPC>(shared_from_this()));
-				else if (construction) construction->Damage(&attack);
+				if (npc) {
+					npc->Damage(&attack, boost::static_pointer_cast<NPC>(shared_from_this()));
+					Random::Dice dice(attack.Amount());
+					damageDealt += dice.Roll();
+					if (HasTrait(FRESH) && damageDealt > 50) RemoveTrait(FRESH);
+				} else if (construction) construction->Damage(&attack);
 			}
 		}	
 	}
@@ -1736,12 +1860,24 @@ void NPC::Damage(Attack* attack, boost::weak_ptr<NPC> aggr) {
 
 	if (health <= 0) Kill();
 
-	if (damage > 0 && res == PHYSICAL_RES) {
-		Game::Inst()->CreateBlood(Coordinate(
-			Position().X() + Random::Generate(-1, 1),
-			Position().Y() + Random::Generate(-1, 1)),
-			Random::Generate(50, 50+damage*10));
+	if (damage > 0) {
+		damageReceived += damage;
+		if (res == PHYSICAL_RES) {
+			Game::Inst()->CreateBlood(Coordinate(
+				Position().X() + Random::Generate(-1, 1),
+				Position().Y() + Random::Generate(-1, 1)),
+				Random::Generate(50, 50+damage*10));
+
+			if (damage >= maxHealth / 3 && attack->Type() == DAMAGE_BLUNT && Random::Generate(10) == 0) {
+				AddTrait(CRACKEDSKULL);
+			}
+		} else if (res == FIRE_RES && Random::Generate(2) == 0) {
+			AddEffect(BURNING);
+		}
 		if (aggr.lock()) aggressor = aggr;
+		if (!jobs.empty() && boost::iequals(jobs.front()->name, "Sleep")) {
+			TaskFinished(TASKFAILFATAL);
+		}
 	}
 }
 
@@ -1784,8 +1920,10 @@ void NPC::Escape() {
 }
 
 void NPC::DestroyAllItems() {
-	for (std::set<boost::weak_ptr<Item> >::iterator it = inventory->begin(); it != inventory->end(); ++it) {
-		if (it->lock()) Game::Inst()->RemoveItem(*it);
+	while (!inventory->empty()) {
+		boost::weak_ptr<Item> item = inventory->GetFirstItem();
+		inventory->RemoveItem(item);
+		Game::Inst()->RemoveItem(item);
 	}
 }
 
@@ -1949,7 +2087,8 @@ void NPC::LoadPresets(std::string filename) {
 	npcTypeStruct->addStructure(resistancesStruct);
 	npcTypeStruct->addStructure(statsStruct);
 
-	parser.run(filename.c_str(), new NPCListener());
+	NPCListener listener = NPCListener();
+	parser.run(filename.c_str(), &listener);
 }
 
 std::string NPC::NPCTypeToString(NPCType type) {
@@ -2222,6 +2361,114 @@ void NPC::ScanSurroundings(bool onlyHostiles) {
 						if (nearNpcs.size() > 10) break;
 
 					} while(!TCODLine::step(&tx, &ty));
+			}
+		}
+	}
+}
+
+void NPC::AddTrait(Trait trait) { 
+	traits.insert(trait); 
+	switch (trait) {
+	case CRACKEDSKULL:
+		AddEffect(CRACKEDSKULLEFFECT);
+		break;
+
+	default: break;
+	}
+}
+
+void NPC::RemoveTrait(Trait trait) { 
+	traits.erase(trait); 
+	switch (trait) {
+	case FRESH:
+		_color.g = std::max(0, _color.g - 100);
+		break;
+		
+	default: break;
+	}
+}
+
+bool NPC::HasTrait(Trait trait) { return traits.find(trait) != traits.end(); }
+
+void NPC::GoBerserk() {
+	ScanSurroundings();
+	if (carried.lock()) {
+		inventory->RemoveItem(carried);
+		carried.lock()->PutInContainer();
+		carried.lock()->Position(Position());
+		Coordinate target(-1,-1);
+		if (!nearNpcs.empty()) {
+			boost::shared_ptr<NPC> creature = boost::next(nearNpcs.begin(), Random::ChooseIndex(nearNpcs))->lock();
+			if (creature) target = creature->Position();
+		}
+		if (target.X() == -1) target = Coordinate(Random::Generate(x-7, x+7), Random::Generate(y-7, y+7));
+		carried.lock()->CalculateFlightPath(target, 50, GetHeight());
+	}
+	carried.reset();
+
+	while (!jobs.empty()) TaskFinished(TASKFAILFATAL, "(FAIL)Gone berserk");
+
+	if (!nearNpcs.empty()) {
+		boost::shared_ptr<NPC> creature = boost::next(nearNpcs.begin(), Random::ChooseIndex(nearNpcs))->lock();
+		boost::shared_ptr<Job> berserkJob(new Job("Berserk!"));
+		berserkJob->internal = true;
+		berserkJob->tasks.push_back(Task(KILL, creature->Position(), creature));
+		jobs.push_back(berserkJob);
+		run = true;
+	}
+
+	AddEffect(RAGE);
+}
+
+void NPC::ApplyEffects(boost::shared_ptr<Item> item) {
+	if (item) {
+		for (std::vector<std::pair<StatusEffectType, int> >::iterator addEffecti = Item::Presets[item->Type()].addsEffects.begin();
+			addEffecti != Item::Presets[item->Type()].addsEffects.end(); ++addEffecti) {
+				if (Random::Generate(99) < addEffecti->second)
+					AddEffect(addEffecti->first);
+		}
+		for (std::vector<std::pair<StatusEffectType, int> >::iterator remEffecti = Item::Presets[item->Type()].removesEffects.begin();
+			remEffecti != Item::Presets[item->Type()].removesEffects.end(); ++remEffecti) {
+				if (Random::Generate(99) < remEffecti->second) {
+					RemoveEffect(remEffecti->first);
+					if (remEffecti->first == DROWSY) weariness = 0; //Special case, the effect would come straight back otherwise
+				}
+		}
+	}
+}
+
+void NPC::UpdateHealth() {
+	if (health <= 0) {Kill(); return;}
+	if (health > maxHealth) health = maxHealth;
+
+	if (Random::Generate(UPDATES_PER_SECOND*10) == 0 && health < maxHealth) ++health;
+
+	if (faction == 0 && health < maxHealth / 2 && !HasEffect(HEALING)) {
+		bool healJobFound = false;
+		for (std::deque<boost::shared_ptr<Job> >::iterator jobi = jobs.begin(); jobi != jobs.end(); ++jobi) {
+			if ((*jobi)->name.find("Heal") != std::string::npos) {
+				healJobFound = true;
+				break;
+			}
+		}
+
+		if (!healJobFound && Item::GoodEffectAdders.find(HEALING) != Item::GoodEffectAdders.end()) {
+			boost::shared_ptr<Item> healItem;
+			for (std::multimap<StatusEffectType, ItemType>::iterator fixi = Item::GoodEffectAdders.equal_range(HEALING).first;
+				fixi != Item::GoodEffectAdders.equal_range(HEALING).second && !healItem; ++fixi) {
+					healItem = Game::Inst()->FindItemByTypeFromStockpiles(fixi->second, Position()).lock();
+			}
+			if (healItem) {
+				boost::shared_ptr<Job> healJob(new Job("Heal"));
+				healJob->internal = true;
+				healJob->ReserveEntity(healItem);
+				healJob->tasks.push_back(Task(MOVE, healItem->Position()));
+				healJob->tasks.push_back(Task(TAKE, healItem->Position(), healItem));
+				if (healItem->IsCategory(Item::StringToItemCategory("drink")))
+					healJob->tasks.push_back(Task(DRINK));
+				else
+					healJob->tasks.push_back(Task(EAT));
+				jobs.push_back(healJob);
 			}
 		}
 	}

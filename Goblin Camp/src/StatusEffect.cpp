@@ -28,7 +28,9 @@ StatusEffect::StatusEffect(StatusEffectType typeval, int g, TCODColor col) :
 graphic(g),
 	color(col),
 	type(typeval),
-	damageType(DAMAGE_BLUNT)
+	damageType(DAMAGE_BLUNT),
+	visible(true),
+	negative(true)
 {
 	//Initialize changes to nothing, ie. 100%
 	for (int i = 0; i < STAT_COUNT; ++i) { statChanges[i] = 1.0; }
@@ -87,8 +89,8 @@ graphic(g),
 		name = "Poisoned";
 		graphic = '#';
 		color = TCODColor::green;
-		cooldown = UPDATES_PER_SECOND * 6;
-		damage.second = 5;
+		cooldown = MONTH_LENGTH*3;
+		damage.second = 1;
 		damageType = DAMAGE_POISON;
 		break;
 
@@ -106,6 +108,7 @@ graphic(g),
 		graphic = '"';
 		color = TCODColor::lightBlue;
 		cooldown = -1;
+		negative=false;
 		break;
 
 	case BADSLEEP:
@@ -125,6 +128,7 @@ graphic(g),
 		cooldown = UPDATES_PER_SECOND * 7;
 		statChanges[STRENGTH] = 2;
 		statChanges[DODGE] = 0.5;
+		negative=false;
 		break;
 
 	case SWIM:
@@ -134,6 +138,7 @@ graphic(g),
 		cooldown = -1;
 		statChanges[DODGE] = 0.0;
 		statChanges[STRENGTH] = 0.75;
+		negative=false;
 		break;
 
 	case EATING:
@@ -141,6 +146,7 @@ graphic(g),
 		graphic = TCOD_CHAR_ARROW_N;
 		color = TCODColor::orange;
 		cooldown = -1;
+		negative=false;
 		break;
 
 	case DRINKING:
@@ -148,11 +154,13 @@ graphic(g),
 		graphic = TCOD_CHAR_ARROW_N;
 		color = TCODColor::blue;
 		cooldown = -1;
+		negative=false;
 		break;
 
 	case CARRYING:
 		name = "Carrying item";
 		cooldown = -1;
+		negative=false;
 		break;
 
 	case WORKING:
@@ -160,6 +168,7 @@ graphic(g),
 		cooldown = -1;
 		graphic = '+';
 		color = TCODColor::grey;
+		negative=false;
 		break;
 
 	case BURNING:
@@ -170,6 +179,46 @@ graphic(g),
 		damage.second = 7;
 		damageType = DAMAGE_FIRE;
 		break;
+
+	case CRACKEDSKULLEFFECT:
+		name = "Cracked skull";
+		cooldown = -1;
+		graphic = 168;
+		color = TCODColor::grey;
+		visible = false;
+		break;
+
+	case INVIGORATED:
+		name = "Invigorated";
+		cooldown = MONTH_LENGTH * 3;
+		graphic = 11;
+		color = TCODColor(127,255,255);
+		visible = false;
+		statChanges[STRENGTH] = 1.25;
+		statChanges[MOVESPEED] = 1.25;
+		statChanges[DODGE] = 1.25;
+		resistanceChanges[POISON_RES] = 1.25;
+		negative=false;
+		break;
+
+	case DRUNK:
+		name = "Drunk";
+		cooldown = MONTH_LENGTH * 2;
+		graphic = 63;
+		color = TCODColor(218,255,127);
+		break;
+
+	case HEALING:
+		name = "Healing";
+		cooldown = MONTH_LENGTH;
+		graphic = 241;
+		color = TCODColor(0,255,0);
+		damage.second = -10;
+		damageType = DAMAGE_MAGIC;
+		negative=false;
+		break;
+
+	default: break;
 	}
 	cooldownDefault = cooldown;
 }
@@ -193,6 +242,14 @@ StatusEffectType StatusEffect::StringToStatusEffectType(std::string str) {
 		return BLEEDING;
 	} else if (boost::iequals(str, "burning")) {
 		return BURNING;
+	} else if (boost::iequals(str, "sluggish")) {
+		return BADSLEEP;
+	} else if (boost::iequals(str, "invigorated")) {
+		return INVIGORATED;
+	} else if (boost::iequals(str, "drunk")) {
+		return DRUNK;
+	} else if (boost::iequals(str, "healing")) {
+		return HEALING;
 	}
 	return HUNGER;
 }
@@ -208,6 +265,10 @@ std::string StatusEffect::StatusEffectTypeToString(StatusEffectType type) {
 	case POISON: return "poison";
 	case BLEEDING: return "bleeding";
 	case BURNING: return "burning";
+	case BADSLEEP: return "sluggish";
+	case INVIGORATED: return "invigorated";
+	case DRUNK: return "drunk";
+	case HEALING: return "healing";
 	default: return "";
 	}
 }
