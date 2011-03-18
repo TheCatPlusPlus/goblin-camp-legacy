@@ -26,7 +26,11 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <boost/filesystem.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/bind.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/python/detail/wrap_python.hpp>
+#include <boost/python.hpp>
 
+namespace py = boost::python;
 namespace fs = boost::filesystem;
 
 #include "data/Config.hpp"
@@ -238,10 +242,11 @@ namespace Data {
 		\see DoSave
 		\bug If sanitized filename is empty, will use @c _ instead. Should tell the user.
 		
-		\param[in] save Save filename.
-		\returns        Boolean indicating success or failure.
+		\param[in] save    Save filename.
+		\param[in] confirm Boolean indicating whether to confirm overwriting an existing save
+		\returns           Boolean indicating success or failure.
 	*/
-	bool SaveGame(const std::string& save) {
+	bool SaveGame(const std::string& save, bool confirm) {
 		std::string file = SanitizeFilename(save);
 		
 		if (file.size() == 0) {
@@ -252,7 +257,7 @@ namespace Data {
 		
 		bool result = false;
 		
-		if (!fs::exists(file)) {
+		if (!fs::exists(file) || !confirm) {
 			DoSave(file, result);
 		} else {
 			MessageBox::ShowMessageBox(

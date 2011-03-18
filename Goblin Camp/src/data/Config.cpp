@@ -84,7 +84,9 @@ namespace Config {
 			("riverWidth",   "30")
 			("riverDepth",   "5")
 			("halfRendering","0")
+			("compressSaves","0")
 			("translucentUI","0")
+			("autosave","1")
 		;
 		
 		insert(Globals::keys)

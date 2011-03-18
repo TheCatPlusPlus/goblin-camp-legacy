@@ -27,6 +27,12 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <iostream>
 #endif
 
+#include <boost/serialization/deque.hpp>
+#include <boost/serialization/weak_ptr.hpp>
+#include <boost/serialization/list.hpp>
+#include <boost/serialization/shared_ptr.hpp>
+#include <boost/serialization/set.hpp>
+
 #include "Random.hpp"
 #include "NPC.hpp"
 #include "Coordinate.hpp"
@@ -47,6 +53,14 @@ SkillSet::SkillSet() {
 
 int SkillSet::operator()(Skill skill) {return skills[skill];}
 void SkillSet::operator()(Skill skill, int value) {skills[skill] = value;}
+
+void SkillSet::save(OutputArchive& ar, const unsigned int version) const {
+	ar & skills;
+}
+
+void SkillSet::load(InputArchive& ar, const unsigned int version) {
+	ar & skills;
+}
 
 std::map<std::string, NPCType> NPC::NPCTypeNames = std::map<std::string, NPCType>();
 std::vector<NPCPreset> NPC::Presets = std::vector<NPCPreset>();
@@ -238,7 +252,6 @@ void NPC::HandleThirst() {
 				newJob->tasks.push_back(Task(TAKE,item.lock()->Position(), item));
 				newJob->tasks.push_back(Task(DRINK));
 				jobs.push_back(newJob);
-				run = true;
 			} else {
 				for (int ix = tmpCoord.X()-1; ix <= tmpCoord.X()+1; ++ix) {
 					for (int iy = tmpCoord.Y()-1; iy <= tmpCoord.Y()+1; ++iy) {
@@ -251,7 +264,6 @@ void NPC::HandleThirst() {
 CONTINUEDRINKBLOCK:
 				newJob->tasks.push_back(Task(DRINK, tmpCoord));
 				jobs.push_back(newJob);
-				run = true;
 			}
 		}
 	}
@@ -289,7 +301,6 @@ void NPC::HandleHunger() {
 					newJob->tasks.push_back(Task(EAT));
 					newJob->tasks.push_back(Task(CALMDOWN));
 					jobs.push_back(newJob);
-					run = true;
 				}				
 			}
 		} else { //Something to eat!
@@ -301,7 +312,6 @@ void NPC::HandleHunger() {
 			newJob->tasks.push_back(Task(TAKE,item.lock()->Position(), item));
 			newJob->tasks.push_back(Task(EAT));
 			jobs.push_back(newJob);
-			run = true;
 		}
 	}
 }
@@ -323,7 +333,6 @@ void NPC::HandleWeariness() {
 		}
 		if (boost::shared_ptr<Construction> bed = wbed.lock()) {
 			if (bed->Built()) {
-				run = true;
 				sleepJob->ReserveEntity(bed);
 				sleepJob->tasks.push_back(Task(MOVE, bed->Position()));
 				sleepJob->tasks.push_back(Task(SLEEP, bed->Position(), bed));
@@ -1312,7 +1321,6 @@ CONTINUEEAT:
 				if (jobs.empty() && threatLocation.X() != 1 && threatLocation.Y() != -1) {
 					boost::shared_ptr<Job> fleeJob(new Job("Flee"));
 					fleeJob->internal = true;
-					run = true;
 					int dx = x - threatLocation.X();
 					int dy = y - threatLocation.Y();
 					if (Map::Inst()->IsWalkable(x + dx, y + dy, (void *)this)) {
@@ -1334,7 +1342,6 @@ CONTINUEEAT:
 				idleJob->tasks.push_back(Task(WAIT, Coordinate(Random::Generate(9), 0)));
 				jobs.push_back(idleJob);
 				if (Distance(Camp::Inst()->Center().X(), Camp::Inst()->Center().Y(), x, y) < 15) run = false;
-				else run = true;
 			}
 		}
 	}
@@ -1357,7 +1364,6 @@ void NPC::StartJob(boost::shared_ptr<Job> job) {
 	}
 
 	jobs.push_back(job);
-	run = true;
 }
 
 TaskResult NPC::Move(TaskResult oldResult) {
@@ -1579,7 +1585,6 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 								newJob->tasks.push_back(Task(TAKE));
 								newJob->tasks.push_back(Task(WIELD));
 								npc->jobs.push_back(newJob);
-								npc->run = true;
 								return true;
 						}
 						break;
@@ -1596,7 +1601,6 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 						newJob->tasks.push_back(Task(TAKE));
 						newJob->tasks.push_back(Task(WEAR));
 						npc->jobs.push_back(newJob);
-						npc->run = true;
 						return true;
 				}
 			} else if (npc->quiver.lock()->empty()) {
@@ -1610,7 +1614,6 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 							newJob->tasks.push_back(Task(QUIVER));
 						}
 						npc->jobs.push_back(newJob);
-						npc->run = true;
 						return true;
 				}
 			}
@@ -1640,7 +1643,6 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 				if (!newJob->tasks.empty()) {
 					npc->jobs.push_back(newJob);
 					if (Distance(npc->Position(), squad->TargetCoordinate(npc->orderIndex)) < 10) npc->run = false;
-					else npc->run = true;
 					return true;
 				}
 			}
@@ -1650,7 +1652,6 @@ bool NPC::GetSquadJob(boost::shared_ptr<NPC> npc) {
 			if (squad->TargetEntity(npc->orderIndex).lock()) {
 				newJob->tasks.push_back(Task(MOVENEAR, squad->TargetEntity(npc->orderIndex).lock()->Position(), squad->TargetEntity(npc->orderIndex)));
 				npc->jobs.push_back(newJob);
-				npc->run = true;
 				return true;
 			}
 			break;
@@ -1693,7 +1694,6 @@ void NPC::PlayerNPCReact(boost::shared_ptr<NPC> npc) {
 				runAroundLikeAHeadlessChickenJob->tasks.push_back(Task(MOVE, npc->Position() + Coordinate(Random::Generate(-2, 2), Random::Generate(-2, 2))));
 			runAroundLikeAHeadlessChickenJob->internal = true;
 			npc->jobs.push_back(runAroundLikeAHeadlessChickenJob);
-			npc->run = true;
 			npc->AddEffect(PANIC);
 			return;
 		}
@@ -1720,7 +1720,6 @@ void NPC::PlayerNPCReact(boost::shared_ptr<NPC> npc) {
 						killJob->tasks.push_back(Task(KILL, npci->lock()->Position(), *npci));
 						while (!npc->jobs.empty()) npc->TaskFinished(TASKFAILNONFATAL);
 						npc->jobs.push_back(killJob);
-						npc->run = true;
 						return;
 					}
 				}
@@ -1779,7 +1778,6 @@ void NPC::HostileAnimalReact(boost::shared_ptr<NPC> animal) {
 			killJob->tasks.push_back(Task(KILL, npci->lock()->Position(), *npci));
 			while (!animal->jobs.empty()) animal->TaskFinished(TASKFAILNONFATAL);
 			animal->jobs.push_back(killJob);
-			animal->run = true;
 			return;
 		}
 	}
@@ -1961,7 +1959,7 @@ void NPC::FireProjectile(boost::weak_ptr<Entity> target) {
 						quiver.lock()->RemoveItem(projectile);
 						projectile->PutInContainer();
 						projectile->Position(Position());
-						projectile->CalculateFlightPath(targetEntity->Position(), 50, GetHeight());
+						projectile->CalculateFlightPath(targetEntity->Position(), 100, GetHeight());
 					}
 				}
 				break;
@@ -2030,7 +2028,7 @@ void NPC::Damage(Attack* attack, boost::weak_ptr<NPC> aggr) {
 			if (damage >= maxHealth / 3 && attack->Type() == DAMAGE_BLUNT && Random::Generate(10) == 0) {
 				AddTrait(CRACKEDSKULL);
 			}
-		} else if (res == FIRE_RES && Random::Generate(2) == 0) {
+		} else if (res == FIRE_RES && Random::Generate(std::max(2, 10-damage)) == 0) {
 			AddEffect(BURNING);
 		}
 		if (aggr.lock()) aggressor = aggr;
@@ -2325,7 +2323,6 @@ void NPC::FindNewWeapon() {
 		weaponJob->tasks.push_back(Task(TAKE, weapon->Position(), weapon));
 		weaponJob->tasks.push_back(Task(WIELD));
 		jobs.push_back(weaponJob);
-		run = true;
 	}
 }
 
@@ -2344,7 +2341,6 @@ void NPC::FindNewArmor() {
 		armorJob->tasks.push_back(Task(TAKE, arm->Position(), arm));
 		armorJob->tasks.push_back(Task(WEAR));
 		jobs.push_back(armorJob);
-		run = true;
 	}
 }
 
@@ -2568,7 +2564,6 @@ void NPC::GoBerserk() {
 		berserkJob->internal = true;
 		berserkJob->tasks.push_back(Task(KILL, creature->Position(), creature));
 		jobs.push_back(berserkJob);
-		run = true;
 	}
 
 	AddEffect(RAGE);
@@ -2722,3 +2717,144 @@ int NPC::GetHeight() {
 }
 
 bool NPC::IsFlying() { return isFlying; }
+
+void NPC::save(OutputArchive& ar, const unsigned int version) const {
+	ar.register_type<Container>();
+	ar.register_type<Item>();
+	ar.register_type<Entity>();
+	ar.register_type<SkillSet>();
+	ar & boost::serialization::base_object<Entity>(*this);
+	std::string npcType(NPC::NPCTypeToString(type));
+	ar & npcType;
+	ar & timeCount;
+	ar & jobs;
+	ar & taskIndex;
+	ar & orderIndex;
+	ar & nopath;
+	ar & findPathWorking;
+	ar & timer;
+	ar & nextMove;
+	ar & run;
+	ar & _color.r;
+	ar & _color.g;
+	ar & _color.b;
+	ar & _bgcolor.r;
+	ar & _bgcolor.g;
+	ar & _bgcolor.b;
+	ar & _graphic;
+	ar & taskBegun;
+	ar & expert;
+	ar & carried;
+	ar & mainHand;
+	ar & offHand;
+	ar & armor;
+	ar & quiver;
+	ar & thirst;
+	ar & hunger;
+	ar & weariness;
+	ar & thinkSpeed;
+	ar & statusEffects;
+	ar & health;
+	ar & maxHealth;
+	ar & foundItem;
+	ar & inventory;
+	ar & needsNutrition;
+	ar & needsSleep;
+	ar & hasHands;
+	ar & isTunneler;
+	ar & baseStats;
+	ar & effectiveStats;
+	ar & baseResistances;
+	ar & effectiveResistances;
+	ar & aggressive;
+	ar & coward;
+	ar & aggressor;
+	ar & dead;
+	ar & squad;
+	ar & attacks;
+	ar & escaped;
+	ar & addedTasksToCurrentJob;
+	ar & Skills;
+	ar & hasMagicRangedAttacks;
+	ar & traits;
+	ar & damageDealt;
+	ar & damageReceived;
+	ar & jobBegun;
+}
+
+void NPC::load(InputArchive& ar, const unsigned int version) {
+	ar.register_type<Container>();
+	ar.register_type<Item>();
+	ar.register_type<Entity>();
+	ar.register_type<SkillSet>();
+	ar & boost::serialization::base_object<Entity>(*this);
+	std::string typeName;
+	ar & typeName;
+	type = -1;
+	bool failedToFindType = false;
+	type = NPC::StringToNPCType(typeName);
+	if (type == -1) { //Apparently a creature type that doesn't exist
+		type = 2; //Whatever the first monster happens to be
+		failedToFindType = true; //We'll allow loading, this creature will just immediately die
+	}
+
+	ar & timeCount;
+	ar & jobs;
+	ar & taskIndex;
+	ar & orderIndex;
+	ar & nopath;
+	ar & findPathWorking;
+	ar & timer;
+	ar & nextMove;
+	ar & run;
+	ar & _color.r;
+	ar & _color.g;
+	ar & _color.b;
+	ar & _bgcolor.r;
+	ar & _bgcolor.g;
+	ar & _bgcolor.b;
+	ar & _graphic;
+	ar & taskBegun;
+	ar & expert;
+	ar & carried;
+	ar & mainHand;
+	ar & offHand;
+	ar & armor;
+	ar & quiver;
+	ar & thirst;
+	ar & hunger;
+	ar & weariness;
+	ar & thinkSpeed;
+	ar & statusEffects;
+	ar & health;
+	if (failedToFindType) health = 0;
+	ar & maxHealth;
+	ar & foundItem;
+	ar & inventory;
+	ar & needsNutrition;
+	ar & needsSleep;
+	ar & hasHands;
+	ar & isTunneler;
+	ar & baseStats;
+	ar & effectiveStats;
+	ar & baseResistances;
+	ar & effectiveResistances;
+	ar & aggressive;
+	ar & coward;
+	ar & aggressor;
+	ar & dead;
+	ar & squad;
+	ar & attacks;
+	ar & escaped;
+	ar & addedTasksToCurrentJob;
+	ar & Skills;
+	ar & hasMagicRangedAttacks;
+	ar & traits;
+	ar & damageDealt;
+	ar & damageReceived;
+	if (version >= 1) {
+		ar & jobBegun;
+	}
+
+	InitializeAIFunctions();
+}

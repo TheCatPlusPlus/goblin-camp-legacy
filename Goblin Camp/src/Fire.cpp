@@ -13,8 +13,9 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License 
 along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
-
 #include "stdafx.hpp"
+
+#include <boost/algorithm/string.hpp>
 
 #include "Fire.hpp"
 #include "Random.hpp"
@@ -122,7 +123,7 @@ void FireNode::Update() {
 		if (temperature > 1 && Random::Generate(9) < 4) {
 			//Burn npcs on the ground
 			for (std::set<int>::iterator npci = Map::Inst()->NPCList(x,y)->begin(); npci != Map::Inst()->NPCList(x,y)->end(); ++npci) {
-				if (!Game::Inst()->GetNPC(*npci)->HasEffect(FLYING)) Game::Inst()->GetNPC(*npci)->AddEffect(BURNING);
+				if (!Game::Inst()->GetNPC(*npci)->HasEffect(FLYING) && Random::Generate(10) == 0) Game::Inst()->GetNPC(*npci)->AddEffect(BURNING);
 			}
 
 			//Burn items
@@ -189,4 +190,22 @@ void FireNode::Update() {
 
 		}
 	}
+}
+
+void FireNode::save(OutputArchive& ar, const unsigned int version) const {
+	ar & x;
+	ar & y;
+	ar & color.r;
+	ar & color.g;
+	ar & color.b;
+	ar & temperature;
+}
+
+void FireNode::load(InputArchive& ar, const unsigned int version) {
+	ar & x;
+	ar & y;
+	ar & color.r;
+	ar & color.g;
+	ar & color.b;
+	ar & temperature;
 }
