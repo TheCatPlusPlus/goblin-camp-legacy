@@ -97,7 +97,7 @@ NPC::NPC(Coordinate pos, boost::function<bool(boost::shared_ptr<NPC>)> findJob,
 	health(100),
 	maxHealth(100),
 	foundItem(boost::weak_ptr<Item>()),
-	inventory(boost::shared_ptr<Container>(new Container(pos, 0, 10, -1))),
+	inventory(boost::shared_ptr<Container>(new Container(pos, 0, 30, -1))),
 	needsNutrition(false),
 	needsSleep(false),
 	hasHands(false),
@@ -209,7 +209,7 @@ void NPC::TaskFinished(TaskResult result, std::string msg) {
 		}
 	}
 	taskBegun = false;
-	run = true;
+	run = NPC::Presets[type].tags.find("calm") == NPC::Presets[type].tags.end() ? true : false;
 
 	if (result != TASKSUCCESS) {
 		//If we're wielding a container (ie. a tool) spill it's contents
@@ -369,10 +369,10 @@ void NPC::Update() {
 
 		if (thirst > THIRST_THRESHOLD && Random::Generate(UPDATES_PER_SECOND * 5 - 1) == 0) {
 			HandleThirst();
-		} else if (thirst > THIRST_THRESHOLD * 2) Kill();
+		} else if (thirst > THIRST_THRESHOLD * 2) Kill(GetDeathMsgThirst());
 		if (hunger > HUNGER_THRESHOLD && Random::Generate(UPDATES_PER_SECOND * 5 - 1) == 0) {
 			HandleHunger();
-		} else if (hunger > 72000) Kill();
+		} else if (hunger > 72000) Kill(GetDeathMsgHunger());
 	}
 
 	if (needsSleep) {
@@ -448,6 +448,9 @@ void NPC::UpdateStatusEffects() {
 	for (int i = 0; i < RES_COUNT; ++i) {
 		effectiveResistances[i] = baseResistances[i];
 	}
+	
+	if (factionPtr->IsFriendsWith(PLAYERFACTION)) effectiveResistances[DISEASE_RES] -= Camp::Inst()->GetDiseaseModifier();
+
 	++statusGraphicCounter;
 	for (std::list<StatusEffect>::iterator statusEffectI = statusEffects.begin(); statusEffectI != statusEffects.end();) {
 		//Apply effects to stats
@@ -498,6 +501,17 @@ void NPC::UpdateStatusEffects() {
 						rEffJob->tasks.push_back(Task(EAT));
 					jobs.push_back(rEffJob);
 				}
+			}
+		}
+
+		if (statusEffectI->contagionChance > 0 && Random::Generate(1000) == 0) { //See if we transmit this effect
+			ScanSurroundings();
+			if (adjacentNpcs.size() > 0 &&
+				Random::Generate(100) < statusEffectI->contagionChance) {
+					for (std::list<boost::weak_ptr<NPC> >::iterator npci = adjacentNpcs.begin(); npci != adjacentNpcs.end(); ++npci) {
+						if (boost::shared_ptr<NPC> npc = npci->lock())
+							npc->TransmitEffect(*statusEffectI);
+					}
 			}
 		}
 
@@ -735,6 +749,12 @@ MOVENEARend:
 								if (water->Depth() > DRINKABLE_WATER_DEPTH) {
 									thirst -= (int)(THIRST_THRESHOLD / 10);
 									AddEffect(DRINKING);
+
+									//Create a temporary water item to give us the right effects
+									boost::shared_ptr<Item> waterItem = Game::Inst()->GetItem(Game::Inst()->CreateItem(Position(), Item::StringToItemType("water"), false, -1)).lock();
+									ApplyEffects(waterItem);
+									Game::Inst()->RemoveItem(waterItem);
+
 									if (thirst < 0) { 
 										TaskFinished(TASKSUCCESS); 
 									}
@@ -1465,6 +1485,15 @@ void NPC::findPath(Coordinate target) {
 	}
 }
 
+bool NPC::IsPathWalkable() {
+	for (int i = 0; i < path->size(); i++) {
+		int x,y;
+		path->get(i, &x, &y);
+		if (!Map::Inst()->IsWalkable(x, y, (void*)this)) return false;
+	}
+	return true;
+}
+
 void NPC::speed(unsigned int value) {baseStats[MOVESPEED]=value;}
 unsigned int NPC::speed() const {return effectiveStats[MOVESPEED];}
 
@@ -1500,7 +1529,7 @@ void NPC::Expert(bool value) {expert = value;}
 Coordinate NPC::Position() const {return Coordinate(x,y);}
 
 bool NPC::Dead() const { return dead; }
-void NPC::Kill() {
+void NPC::Kill(std::string deathMessage) {
 	if (!dead) {//You can't be killed if you're already dead!
 		dead = true;
 		health = 0;
@@ -1528,8 +1557,7 @@ void NPC::Kill() {
 			inventory->RemoveItem(witem);
 		}
 
-		if (boost::iequals(NPC::NPCTypeToString(type), "orc")) Announce::Inst()->AddMsg("An orc has died!", TCODColor::red, Position());
-		else if (boost::iequals(NPC::NPCTypeToString(type), "goblin")) Announce::Inst()->AddMsg("A goblin has died!", TCODColor::red, Position());
+		if (deathMessage.length() > 0) Announce::Inst()->AddMsg(deathMessage, TCODColor::red, Position());
 		
 		Stats::Inst()->deaths[NPC::NPCTypeToString(type)] += 1;
 		Stats::Inst()->AddPoints(NPC::Presets[type].health);
@@ -1813,6 +1841,7 @@ void NPC::AnimalReact(boost::shared_ptr<NPC> animal) {
 		for (std::list<boost::weak_ptr<NPC> >::iterator npci = animal->nearNpcs.begin(); npci != animal->nearNpcs.end(); ++npci) {
 			if (!animal->factionPtr->IsFriendsWith(npci->lock()->GetFaction())) {
 				animal->AddEffect(PANIC);
+				animal->run = true;
 			}
 		}
 	}
@@ -1954,6 +1983,7 @@ void NPC::FireProjectile(boost::weak_ptr<Entity> target) {
 						projectile->PutInContainer();
 						projectile->Position(Position());
 						projectile->CalculateFlightPath(targetEntity->Position(), 100, GetHeight());
+						projectile->SetFaction(PLAYERFACTION);
 					}
 				}
 				break;
@@ -2009,11 +2039,11 @@ void NPC::Damage(Attack* attack, boost::weak_ptr<NPC> aggr) {
 		}
 	}
 
-	if (health <= 0) Kill();
+	if (health <= 0) Kill(GetDeathMsgCombat(aggr, attack->Type()));
 
 	if (damage > 0) {
 		damageReceived += damage;
-		if (res == PHYSICAL_RES) {
+		if (res == PHYSICAL_RES && Random::Generate(99) > effectiveResistances[BLEEDING_RES]) {
 			Game::Inst()->CreateBlood(Coordinate(
 				Position().X() + Random::Generate(-1, 1),
 				Position().Y() + Random::Generate(-1, 1)),
@@ -2161,6 +2191,8 @@ class NPCListener : public ITCODParserListener {
 			NPC::Presets[npcIndex].resistances[FIRE_RES] = value.i;
 		} else if (boost::iequals(name,"poison")) {
 			NPC::Presets[npcIndex].resistances[POISON_RES] = value.i;
+		} else if (boost::iequals(name,"bleeding")) {
+			NPC::Presets[npcIndex].resistances[BLEEDING_RES] = value.i;
 		} else if (boost::iequals(name,"tags")) {
 			for (int i = 0; i < TCOD_list_size(value.list); ++i) {
 				std::string tag = (char*)TCOD_list_get(value.list,i);
@@ -2244,6 +2276,7 @@ void NPC::LoadPresets(std::string filename) {
 	resistancesStruct->addProperty("cold", TCOD_TYPE_INT, false);
 	resistancesStruct->addProperty("fire", TCOD_TYPE_INT, false);
 	resistancesStruct->addProperty("poison", TCOD_TYPE_INT, false);
+	resistancesStruct->addProperty("bleeding", TCOD_TYPE_INT, false);
 
 	TCODParserStruct *statsStruct = parser.newStructure("stats");
 	statsStruct->addProperty("health", TCOD_TYPE_INT, true);
@@ -2457,6 +2490,7 @@ NPCPreset::NPCPreset(std::string typeNameVal) :
 	for (int i = 0; i < RES_COUNT; ++i) {
 		resistances[i] = 0;
 	}
+	resistances[DISEASE_RES] = 75; //Pretty much every creature is somewhat resistant to disease
 	group.addsub = 0;
 	group.multiplier = 1;
 	group.nb_dices = 1;
@@ -2482,17 +2516,27 @@ void NPC::AbortJob(boost::weak_ptr<Job> wjob) {
 bool NPC::IsTunneler() const { return isTunneler; }
 
 void NPC::ScanSurroundings(bool onlyHostiles) {
+	adjacentNpcs.clear();
 	nearNpcs.clear();
 	nearConstructions.clear();
 	threatLocation = Coordinate(-1,-1);
 	seenFire = false;
+	bool skipPosition = false; //We should skip checking this npc's position after the first time
 	for (int endx = std::max((signed int)x - LOS_DISTANCE, 0); endx <= std::min((signed int)x + LOS_DISTANCE, Map::Inst()->Width()-1); endx += 2) {
 		for (int endy = std::max((signed int)y - LOS_DISTANCE, 0); endy <= std::min((signed int)y + LOS_DISTANCE, Map::Inst()->Height()-1); endy += 2) {
 			if (endx == std::max((signed int)x - LOS_DISTANCE, 0) || endx == std::min((signed int)x + LOS_DISTANCE, Map::Inst()->Width()-1)
 				|| endy == std::max((signed int)y - LOS_DISTANCE, 0) || endy == std::min((signed int)y + LOS_DISTANCE, Map::Inst()->Height()-1)) {
 					int tx = x;
 					int ty = y;
+					int adjacent = 2; //We're adjacent for the first two iterations
 					TCODLine::init(tx, ty, endx, endy);
+
+					if (skipPosition) {
+						TCODLine::step(&tx, &ty);
+						--adjacent;
+					}
+					skipPosition = true;
+
 					do {
 						/*Check constructions before checking for lightblockage because we can see a wall
 						even though we can't see through it*/
@@ -2507,14 +2551,18 @@ void NPC::ScanSurroundings(bool onlyHostiles) {
 						//Add all the npcs on this tile, or only hostiles if that boolean is set
 						for (std::set<int>::iterator npci = Map::Inst()->NPCList(tx,ty)->begin(); npci != Map::Inst()->NPCList(tx,ty)->end(); ++npci) {
 							if (*npci != uid) {
-								if (!factionPtr->IsFriendsWith(Game::Inst()->GetNPC(*npci)->GetFaction())) threatLocation = Coordinate(tx,ty);
+								boost::shared_ptr<NPC> npc = Game::Inst()->GetNPC(*npci);
+								if (!factionPtr->IsFriendsWith(npc->GetFaction())) threatLocation = Coordinate(tx,ty);
 								if (!onlyHostiles || 
-									(onlyHostiles && !factionPtr->IsFriendsWith(Game::Inst()->GetNPC(*npci)->GetFaction()))) 
-									nearNpcs.push_back(Game::Inst()->GetNPC(*npci));
+									(onlyHostiles && !factionPtr->IsFriendsWith(npc->GetFaction()))) {
+										nearNpcs.push_back(npc);
+										if (adjacent-- > 0)
+											adjacentNpcs.push_back(npc);
+								}
 							}
 						}
 
-						//Only care about fire if we're not flying and not effectively immune
+						//Only care about fire if we're not flying and/or not effectively immune
 						if (!HasEffect(FLYING) && Map::Inst()->GetFire(tx,ty).lock()) {
 							if (effectiveResistances[FIRE_RES] < 90) {
 								threatLocation = Coordinate(tx,ty);
@@ -2524,7 +2572,7 @@ void NPC::ScanSurroundings(bool onlyHostiles) {
 
 						/*Stop if we already see many npcs, otherwise this can start to bog down in
 						high traffic places*/
-						if (nearNpcs.size() > 10) break;
+						if (adjacent <= 0 && nearNpcs.size() > 16) break;
 
 					} while(!TCODLine::step(&tx, &ty));
 			}
@@ -2590,7 +2638,7 @@ void NPC::ApplyEffects(boost::shared_ptr<Item> item) {
 		for (std::vector<std::pair<StatusEffectType, int> >::iterator addEffecti = Item::Presets[item->Type()].addsEffects.begin();
 			addEffecti != Item::Presets[item->Type()].addsEffects.end(); ++addEffecti) {
 				if (Random::Generate(99) < addEffecti->second)
-					AddEffect(addEffecti->first);
+					TransmitEffect(addEffecti->first);
 		}
 		for (std::vector<std::pair<StatusEffectType, int> >::iterator remEffecti = Item::Presets[item->Type()].removesEffects.begin();
 			remEffecti != Item::Presets[item->Type()].removesEffects.end(); ++remEffecti) {
@@ -2603,7 +2651,8 @@ void NPC::ApplyEffects(boost::shared_ptr<Item> item) {
 }
 
 void NPC::UpdateHealth() {
-	if (health <= 0) {Kill(); return;}
+	if (health <= 0) {Kill(GetDeathMsg()); return;}
+	if (effectiveStats[STRENGTH] <= baseStats[STRENGTH]/10) {Kill(GetDeathMsgStrengthLoss()); return;}
 	if (health > maxHealth) health = maxHealth;
 
 	if (Random::Generate(UPDATES_PER_SECOND*10) == 0 && health < maxHealth) ++health;
@@ -2744,6 +2793,229 @@ void NPC::SetFaction(int newFaction) {
 		factionPtr = Faction::factions[0];
 	}
 }
+
+void NPC::TransmitEffect(StatusEffect effect) {
+	if (Random::Generate(effectiveResistances[effect.applicableResistance]) == 0)
+		AddEffect(effect);
+}
+
+std::string NPC::GetDeathMsg() {
+	int choice = Random::Generate(5);
+	switch (choice) {
+	default:
+	case 0:
+		return name + " has died";
+
+	case 1:
+		return name + " has left the mortal realm";
+
+	case 2:
+		return name + " is no longer among us";
+
+	case 3:
+		return name + " is wormfood";
+
+	case 4:
+		return name + " lost his will to live";
+	}
+}
+
+std::string NPC::GetDeathMsgStrengthLoss() {
+	std::string effectName = "Unknown disease";
+	for (std::list<StatusEffect>::const_iterator statI = statusEffects.begin(); statI != statusEffects.end(); ++statI) {
+		if (statI->statChanges[STRENGTH] < 1) {
+			effectName = statI->name;
+			break;
+		}
+	}
+
+	int choice = Random::Generate(5);
+	switch (choice) {
+	default:
+	case 0:
+		return name + " has died from " + effectName;
+
+	case 1:
+		return name + " succumbed to " + effectName;
+
+	case 2:
+		return effectName + " claims another victim in " + name;
+
+	case 3:
+		return name + " is overcome by " + effectName;
+
+	case 4:
+		return effectName + " was too much for " + name;
+	}
+}
+
+std::string NPC::GetDeathMsgThirst() {
+	int choice = Random::Generate(2);
+	switch (choice) {
+	default:
+	case 0:
+		return name + " has died from thirst";
+
+	case 1:
+		return name + " died from dehydration";
+	}
+}
+
+std::string NPC::GetDeathMsgHunger() {
+	int choice = Random::Generate(2);
+	switch (choice) {
+	default:
+	case 0:
+		return name + " has died from hunger";
+
+	case 1:
+		return name + " was too weak to live";
+	}
+}
+
+std::string NPC::GetDeathMsgCombat(boost::weak_ptr<NPC> other, DamageType damage) {
+	int choice = Random::Generate(4);
+
+	if (boost::shared_ptr<NPC> attacker = other.lock()) {
+		std::string otherName = attacker->Name();
+
+		switch (damage) {
+		case DAMAGE_SLASH:
+			switch (choice) {
+			default:
+			case 0:
+				return otherName + " sliced " + name + " into ribbons";
+
+			case 1:
+				return otherName + " slashed " + name + " into pieces";
+
+			case 2:
+				return name + " was dissected by " + otherName;
+
+			case 3:
+				return otherName + " chopped " + name + " up";
+			}
+
+		case DAMAGE_BLUNT:
+			switch (choice) {
+			default:
+			case 0:
+				return otherName + " bludgeoned " + name + " to death";
+
+			case 1:
+				return otherName + " smashed " + name + " into pulp";
+
+			case 2:
+				return name + " was crushed by " + otherName;
+
+			case 3:
+				return otherName + " hammered " + name + " to death";
+			}
+
+		case DAMAGE_PIERCE:
+			switch (choice) {
+			default:
+			case 0:
+				return otherName + " pierced " + name + " straight through";
+
+			case 1:
+				return otherName + " punched holes through " + name;
+
+			case 2:
+				return name + " was made into a pincushion by " + otherName;
+			}
+
+		case DAMAGE_FIRE:
+			switch (choice) {
+			default:
+			case 0:
+				return otherName + " burnt " + name + " to ashes";
+
+			case 1:
+				return otherName + " fried " + name + " to a crisp";
+
+			case 2:
+				return name + " was barbecued by" + otherName;
+			}
+
+		default:
+			switch (choice) {
+			default:
+			case 0:
+				return otherName + " ended " + name + "'s life";
+
+			case 1:
+				return otherName + " was too much for " + name + " to handle";
+
+			case 2:
+				return otherName + " killed " + name;
+			}
+		}
+	}
+	
+	switch (damage) {
+	case DAMAGE_SLASH:
+		switch (choice) {
+		default:
+		case 0:
+			return  name + " was cut into ribbons";
+
+		case 1:
+			return  name + " got slashed into pieces";
+
+		case 2:
+			return name + " was dissected";
+
+		case 3:
+			return name + "was chopped up";
+		}
+
+	case DAMAGE_BLUNT:
+		switch (choice) {
+		default:
+		case 0:
+			return  name + " was bludgeoned to death";
+
+		case 1:
+			return name + " was smashed into pulp";
+
+		case 2:
+			return name + " was crushed";
+
+		case 3:
+			return name + " was hammered to death";
+		}
+
+	case DAMAGE_PIERCE:
+		switch (choice) {
+		default:
+		case 0:
+			return name + " got pierced straight through";
+
+		case 1:
+			return name + " got too many holes punched through";
+
+		case 2:
+			return name + " was made into a pincushion";
+		}
+
+	case DAMAGE_FIRE:
+		switch (choice) {
+		default:
+		case 0:
+			return name + " burnt into ashes";
+
+		case 1:
+			return name + " fried to a crisp";
+
+		case 2:
+			return name + " was barbecued";
+		}
+
+	default: return GetDeathMsg();
+	}
+}
+
 
 void NPC::save(OutputArchive& ar, const unsigned int version) const {
 	ar.register_type<Container>();

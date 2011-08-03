@@ -36,6 +36,8 @@ enum Resistance {
 	POISON_RES,
 	COLD_RES,
 	FIRE_RES,
+	DISEASE_RES,
+	BLEEDING_RES,
 	RES_COUNT
 };
 
@@ -65,6 +67,10 @@ enum StatusEffectType {
 	HIGHGROUND,
 	TRIPPED,
 	BRAVE,
+	COLLYWOBBLES,
+	DROOPS,
+	RATTLES,
+	CHILLS,
 	STATUS_EFFECT_COUNT
 };
 
@@ -90,6 +96,10 @@ public:
 	int damageType;
 	bool visible;
 	bool negative; //Is this a negative effect? ie. one the creature wants to get rid of
+	int contagionChance; //How contagious (if at all) is this effect?
+	Resistance applicableResistance; //What resistance helps resist this effect?
 };
 
-BOOST_CLASS_VERSION(StatusEffect, 0)
+BOOST_CLASS_VERSION(StatusEffect, 1)
+
+//Version 1 = v0.2 - contagionChance

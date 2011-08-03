@@ -109,13 +109,10 @@ void StockManager::Init() {
 					}
 				}
 			}
-			//Add items that aren't produced, but are still handy to see on the stockmanager screen
-			if (Item::Presets[item].categories.find(Item::StringToItemCategory("Seed")) != Item::Presets[item].categories.end() ||
-				Item::Presets[item].categories.find(Item::StringToItemCategory("Food")) != Item::Presets[item].categories.end() ||
-				Item::Presets[item].categories.find(Item::StringToItemCategory("Fiber")) != Item::Presets[item].categories.end() ||
-				Item::Presets[item].categories.find(Item::StringToItemCategory("Bone")) != Item::Presets[item].categories.end()) {
-					producables.insert(item);
-			}
+
+			//Anything not in the Misc. category can be shown in the stock manager dialog
+			if (Item::Presets[item].categories.find(Item::StringToItemCategory("Misc.")) == Item::Presets[item].categories.end())
+				  producables.insert(item);
 		}
 
 		//Flag all inorganic materials for dumping (except seeds which are technically not organic)

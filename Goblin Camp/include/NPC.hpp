@@ -151,6 +151,7 @@ class NPC : public Entity {
 	boost::shared_ptr<Container> inventory;
 
 	std::list<boost::weak_ptr<NPC> > nearNpcs;
+	std::list<boost::weak_ptr<NPC> > adjacentNpcs;
 	std::list<boost::weak_ptr<Construction> > nearConstructions;
 	bool needsNutrition;
 	bool needsSleep;
@@ -196,6 +197,12 @@ class NPC : public Entity {
 	void UpdateHealth();
 	boost::shared_ptr<Faction> factionPtr;
 
+	std::string GetDeathMsg();
+	std::string GetDeathMsgStrengthLoss();
+	std::string GetDeathMsgCombat(boost::weak_ptr<NPC> other, DamageType);
+	std::string GetDeathMsgThirst();
+	std::string GetDeathMsgHunger();
+
 public:
 	typedef std::list<StatusEffect>::iterator StatusEffectIterator;
 
@@ -223,6 +230,7 @@ public:
 	void TaskFinished(TaskResult, std::string = "");
 	TaskResult Move(TaskResult);
 	void findPath(Coordinate);
+        bool IsPathWalkable();
 	void StartJob(boost::shared_ptr<Job>);
 	void AddEffect(StatusEffectType);
 	void AddEffect(StatusEffect);
@@ -236,7 +244,7 @@ public:
 	void Expert(bool);
 
 	bool Dead() const;
-	void Kill();
+	void Kill(std::string deathMessage);
 	void PickupItem(boost::weak_ptr<Item>);
 	void DropItem(boost::weak_ptr<Item>);
 	void Hit(boost::weak_ptr<Entity>, bool careful = false);
@@ -289,6 +297,8 @@ public:
 
 	virtual int GetHeight() const;
 	virtual void SetFaction(int);
+
+	void TransmitEffect(StatusEffect);
 };
 
 BOOST_CLASS_VERSION(NPC, 1)

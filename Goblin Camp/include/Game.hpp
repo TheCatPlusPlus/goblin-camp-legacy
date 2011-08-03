@@ -159,13 +159,14 @@ public:
 	static void SetSquadTargetCoordinate(Order, Coordinate, boost::shared_ptr<Squad>, bool autoClose = true);
 	static void SetSquadTargetEntity(Order, Coordinate, boost::shared_ptr<Squad>);
 	NPCType GetRandomNPCTypeByTag(std::string tag);
-	void CreateNPCs(int,NPCType,Coordinate,Coordinate);
+	std::vector<int> CreateNPCs(int,NPCType,Coordinate,Coordinate);
 	unsigned int PeacefulFaunaCount() const;
 	void PeacefulFaunaCount(int);
 	void Hungerize(Coordinate);
 	void Thirstify(Coordinate);
 	void Tire(Coordinate);
 	void Badsleepify(Coordinate);
+	void Diseasify(Coordinate);
 	boost::shared_ptr<NPC> GetNPC(int) const;
 
 	/*      CONSTRUCTIONS       CONSTRUCTIONS       CONSTRUCTIONS       */
@@ -175,6 +176,7 @@ public:
 	void RemoveConstruction(boost::weak_ptr<Construction>);
 	static int PlaceStockpile(Coordinate, Coordinate, ConstructionType, int);
 	void RefreshStockpiles() { refreshStockpiles = true; }
+	void RebalanceStockpiles(ItemCategory requiredCategory, boost::shared_ptr<Stockpile> excluded);
 	Coordinate FindClosestAdjacent(Coordinate, boost::weak_ptr<Entity>, int faction = -1);
 	static bool Adjacent(Coordinate, boost::weak_ptr<Entity>);
 	boost::weak_ptr<Construction> GetConstruction(int);
@@ -246,6 +248,7 @@ public:
 	void CreateBlood(Coordinate,int);
 
 	void TriggerAttack();
+	void TriggerMigration();
 
 	void AddDelay(int delay, boost::function<void()>);
 

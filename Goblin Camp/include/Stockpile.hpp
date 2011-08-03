@@ -45,6 +45,8 @@ protected:
 	std::map<Coordinate, boost::shared_ptr<Container> > containers;
 	std::map<Coordinate, TCODColor> colors;
 	std::map<ItemCategory, int> limits;
+	std::map<ItemCategory, int> demand;
+	std::map<ItemCategory, int> lastDemandBalance; //At what amount did we last check container demand?
 public:
 	virtual ~Stockpile();
 	int Build();
@@ -53,11 +55,11 @@ public:
 	boost::weak_ptr<Item> FindItemByType(ItemType, int flags=0, int value=0);
 	int Symbol();
 	void Symbol(int);
-	void Expand(Coordinate,Coordinate);
+	int Expand(Coordinate,Coordinate);
 	bool Allowed(ItemCategory);
 	bool Allowed(std::set<ItemCategory>);
-	bool Full(ItemType = -1);
-	Coordinate FreePosition();
+	virtual bool Full(ItemType = -1);
+	virtual Coordinate FreePosition();
 	void ReserveSpot(Coordinate, bool, ItemType);
 	boost::weak_ptr<Container> Storage(Coordinate);
 	void SwitchAllowed(ItemCategory, bool childrenAlso = true, bool countParentsOnly = false);
@@ -71,6 +73,10 @@ public:
 	int GetLimit(ItemCategory);
 	virtual void AcceptVisitor(ConstructionVisitor& visitor);
 	virtual void Dismantle(Coordinate pos=Coordinate(-1,-1));
+	int GetDemand(ItemCategory);
+	int GetAmount(ItemCategory);
+	void Reorganize();
 };
 
-BOOST_CLASS_VERSION(Stockpile, 0)
+//1 = v0.2
+BOOST_CLASS_VERSION(Stockpile, 1)

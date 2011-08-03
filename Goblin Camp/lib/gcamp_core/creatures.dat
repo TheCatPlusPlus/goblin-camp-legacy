@@ -377,6 +377,7 @@ npc_type "skeleton" {
 	resistances {
 		physical=15
 		magic=50
+		bleeding=100
 	}
 	spawnAsGroup="1d20"
 	attack "Swipe" {
@@ -621,6 +622,7 @@ npc_type "will o wisp" {
 	resistances {
 		physical=30
 		magic=30
+		bleeding=100
 	}
 	attack "Blind" {
 		type="magic"
@@ -645,6 +647,7 @@ npc_type "raw golem" {
 	resistances {
 		physical=15
 		poison=100
+		bleeding=100
 	}
 	attack "Smash" {
 		type="blunt"
@@ -674,6 +677,7 @@ npc_type "fired golem" {
 		physical=25
 		poison=100
 		fire=100
+		bleeding=100
 	}
 	attack "Smash" {
 		type="blunt"
@@ -731,6 +735,7 @@ npc_type "treeman" {
 	}
 	resistances {
 		physical=15
+		bleeding=100
 	}
 	spawnAsGroup="1d2"
 	attack "Smash" {
@@ -959,6 +964,7 @@ npc_type "fire elemental" {
 	resistances {
 		physical=50
 		fire=100
+		bleeding=100
 	}
 	spawnAsGroup="1d2"
 	attack "Burn" {
@@ -1057,7 +1063,88 @@ npc_type "human soldier" {
 	equipOneOf=["Quiver"]
 	equipOneOf=["Wooden bow", "Iron spear", "Iron war hammer", "Iron axe", "Iron sword"]
 	equipOneOf=["Iron arrow"]
-	spawnAsGroup="10+1d20"
+	spawnAsGroup="1d20+10"
 	faction = "Humans"
+	death="Corpse"
 }
-	
+
+npc_type "mumak" {
+	name="Mumak"
+	plural="Mumakil"
+	tier=1
+	tags=["localWildlife", "migratory", "calm"]
+	color="128,128,128"
+	graphic='q'
+	AI="PeacefulAnimal"
+	stats {
+		speed=15
+		health=150
+		dodge=1
+		size=30
+	}		
+	resistances {
+		physical=25
+	}
+	attack "Smash" {
+		type="blunt"
+		damage="1d75+15"
+		cooldown=80
+		statusEffects=["Concussion"]
+		effectChances=[     80     ]
+	}
+	spawnAsGroup="5d5"
+	death="Huge corpse"
+}
+
+npc_type "mastodon" {
+	name="Mastodon"
+	tier=3
+	tags=["localWildlife", "migratory", "calm"]
+	color="100,100,100"
+	graphic='q'
+	AI="PeacefulAnimal"
+	stats {
+		speed=10
+		health=150
+		dodge=3
+		size=25
+	}
+	resistances {
+		physical=25
+	}
+	attack "Stomp" {
+		type="blunt"
+		damage="1d50+20"
+		cooldown=75
+		statusEffects=["Concussion"]
+		effectChances=[     50     ]
+	}
+	spawnAsGroup="3d3"
+	death="Huge corpse"
+}
+
+npc_type "Baluchitherium" {
+	name="Baluchitheria"
+	tier=3
+	tags=["localWildlife", "migratory", "calm"]
+	color="130,130,130"
+	graphic='q'
+	AI="PeacefulAnimal"
+	stats {
+		speed=15
+		health=100
+		dodge=5
+		strength=10
+		size=20
+	}
+	resistances {
+		physical=5
+	}
+	attack "Gore" {
+		type="piercing"
+		damage="1d30+10"
+		cooldown=50
+	}
+	spawnAsGroup="5d5+5"
+	death="Large corpse"
+}
