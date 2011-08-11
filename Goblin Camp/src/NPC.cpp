@@ -1014,7 +1014,7 @@ CONTINUEEAT:
 			case SLEEP:
 				AddEffect(SLEEPING);
 				AddEffect(BADSLEEP);
-				weariness -= 50;
+				weariness -= 25;
 				if (weariness <= 0) {
 					if (boost::shared_ptr<Entity> entity = currentEntity().lock()) {
 						if (boost::static_pointer_cast<Construction>(entity)->HasTag(BED)) {
@@ -1564,7 +1564,7 @@ void NPC::Kill(std::string deathMessage) {
 			inventory->RemoveItem(witem);
 		}
 
-		if (deathMessage.length() > 0) Announce::Inst()->AddMsg(deathMessage, TCODColor::red, Position());
+		if (deathMessage.length() > 0) Announce::Inst()->AddMsg(deathMessage, (factionPtr->IsFriendsWith(PLAYERFACTION) ? TCODColor::red : TCODColor::brass), Position());
 		
 		Stats::Inst()->deaths[NPC::NPCTypeToString(type)] += 1;
 		Stats::Inst()->AddPoints(NPC::Presets[type].health);
@@ -1769,11 +1769,14 @@ void NPC::PlayerNPCReact(boost::shared_ptr<NPC> npc) {
 
 		//Cowards panic if they see aggressive unfriendlies or their attacker
 		for (std::list<boost::weak_ptr<NPC> >::iterator npci = npc->nearNpcs.begin(); npci != npc->nearNpcs.end(); ++npci) {
-			if ((!npc->factionPtr->IsFriendsWith(npci->lock()->GetFaction()) && npci->lock()->aggressive) || 
-				npci->lock() == npc->aggressor.lock()) {
+			boost::shared_ptr<NPC> otherNpc = npci->lock();
+			if ((!npc->factionPtr->IsFriendsWith(otherNpc->GetFaction()) && otherNpc->aggressive) || 
+				otherNpc == npc->aggressor.lock()) {
 				JobManager::Inst()->NPCNotWaiting(npc->uid);
 				while (!npc->jobs.empty()) npc->TaskFinished(TASKFAILNONFATAL, "(FAIL)Enemy sighted");
 				npc->AddEffect(PANIC);
+				npc->threatLocation = otherNpc->Position();
+				return;
 			}
 		}
 	} else {
@@ -2045,7 +2048,7 @@ void NPC::Damage(Attack* attack, boost::weak_ptr<NPC> aggr) {
 
 	for (unsigned int effecti = 0; effecti < attack->StatusEffects()->size(); ++effecti) {
 		if (Random::Generate(99) < attack->StatusEffects()->at(effecti).second) {
-			AddEffect(attack->StatusEffects()->at(effecti).first);
+			TransmitEffect(attack->StatusEffects()->at(effecti).first);
 		}
 	}
 
@@ -2822,8 +2825,10 @@ void NPC::SetFaction(int newFaction) {
 }
 
 void NPC::TransmitEffect(StatusEffect effect) {
-	if (Random::Generate(effectiveResistances[effect.applicableResistance]) == 0)
-		AddEffect(effect);
+	if (Random::Generate(effectiveResistances[effect.applicableResistance]) == 0) {
+		if (effect.type != PANIC || coward) //PANIC can only be transmitted to cowards
+			AddEffect(effect);
+	}
 }
 
 //TODO all those messages should be data-driven
@@ -2995,7 +3000,7 @@ std::string NPC::GetDeathMsgCombat(boost::weak_ptr<NPC> other, DamageType damage
 			return name + " was dissected";
 
 		case 3:
-			return name + "was chopped up";
+			return name + " was chopped up";
 		}
 
 	case DAMAGE_BLUNT:

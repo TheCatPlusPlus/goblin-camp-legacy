@@ -61,6 +61,7 @@ namespace py = boost::python;
 #include "UI/Label.hpp"
 #include "UI/Button.hpp"
 #include "UI/ScrollPanel.hpp"
+#include "UI/StockManagerDialog.hpp"
 
 #include "TCODMapRenderer.hpp"
 #include "tileRenderer/TileSetLoader.hpp"
@@ -70,7 +71,10 @@ namespace py = boost::python;
 int Game::ItemTypeCount = 0;
 int Game::ItemCatCount = 0;
 
+bool Game::initializedOnce = false;
 Game* Game::instance = 0;
+
+bool Game::devMode = false;
 
 Game::Game() :
 screenWidth(0),
@@ -85,11 +89,10 @@ screenWidth(0),
 	toMainMenu(false),
 	running(false),
 	safeMonths(3),
-	devMode(false),
 	events(boost::shared_ptr<Events>()),
 	gameOver(false),
-	camX(0),
-	camY(0),
+	camX(180),
+	camY(180),
 	buffer(0)
 {
 	for(int i = 0; i < 12; i++) {
@@ -104,7 +107,11 @@ Game::~Game() {
 }
 
 Game* Game::Inst() {
-	if (!instance) instance = new Game();
+	if (!instance) {
+		instance = new Game();
+		instance->Init(!initializedOnce);
+		initializedOnce = true;
+	}
 	return instance;
 }
 
@@ -399,7 +406,6 @@ int Game::CreateNPC(Coordinate target, NPCType type) {
 		}
 	}
 
-	assert(Map::Inst()->IsInside(npc->Position())); //invariant: the NPCs in npcList are on the map
 	npcList.insert(std::pair<int,boost::shared_ptr<NPC> >(npc->Uid(),npc));
 	npc->factionPtr->AddMember(npc);
 
@@ -485,7 +491,7 @@ void Game::ErrorScreen() {
 	exit(255);
 }
 
-void Game::Init() {
+void Game::Init(bool firstTime) {
 	int width  = Config::GetCVar<int>("resolutionX");
 	int height = Config::GetCVar<int>("resolutionY");
 	bool fullscreen = Config::GetCVar<bool>("fullscreen");
@@ -507,14 +513,14 @@ void Game::Init() {
 
 	//Enabling TCOD_RENDERER_GLSL can cause GCamp to crash on exit, apparently it's because of an ATI driver issue.
 	TCOD_renderer_t renderer_type = static_cast<TCOD_renderer_t>(Config::GetCVar<int>("renderer"));
-	TCODConsole::initRoot(screenWidth, screenHeight, "Goblin Camp", fullscreen, renderer_type);
+	if (firstTime) TCODConsole::initRoot(screenWidth, screenHeight, "Goblin Camp", fullscreen, renderer_type);
 	TCODMouse::showCursor(true);
 	TCODConsole::setKeyboardRepeat(500, 10);
 
 	buffer = new TCODConsole(screenWidth, screenHeight);
 	ResetRenderer();
 
-	LoadingScreen();
+	if (firstTime) LoadingScreen();
 
 	events = boost::shared_ptr<Events>(new Events(Map::Inst()));
 	
@@ -571,7 +577,7 @@ void Game::DismantleConstruction(Coordinate a, Coordinate b) {
 			int construction = Map::Inst()->GetConstruction(p);
 			if (construction >= 0) {
 				if (instance->GetConstruction(construction).lock()) {
-					instance->GetConstruction(construction).lock()->Dismantle(Coordinate(p));
+					instance->GetConstruction(construction).lock()->Dismantle(p);
 				} else {
 					Map::Inst()->SetConstruction(p,-1);
 				}
@@ -616,7 +622,6 @@ int Game::CreateItem(Coordinate pos, ItemType type, bool store, int ownerFaction
 			} else {
 				container->AddItem(newItem);
 			}
-			assert(newItem); //invariant: itemList pointers are non-NULL
 			itemList.insert(std::pair<int,boost::shared_ptr<Item> >(newItem->Uid(), newItem));
 			if (store) StockpileItem(newItem, false, true);
 
@@ -713,7 +718,7 @@ boost::weak_ptr<Item> Game::FindItemByCategoryFromStockpiles(ItemCategory catego
 		if (consIter->second->stockpile && !consIter->second->farmplot) {
 			boost::weak_ptr<Item> item(boost::static_pointer_cast<Stockpile>(consIter->second)->FindItemByCategory(category, flags, value));
 			if (item.lock() && !item.lock()->Reserved()) {
-				int distance = Distance(item.lock()->Position(), target);
+				int distance = (flags & MOSTDECAYED ? item.lock()->GetDecay() : Distance(item.lock()->Position(), target));
 				if(distance < nearestDistance) {
 					nearestDistance = distance;
 					nearest = item;
@@ -733,7 +738,7 @@ boost::weak_ptr<Item> Game::FindItemByTypeFromStockpiles(ItemType type, Coordina
 		if (consIter->second->stockpile && !consIter->second->farmplot) {
 			boost::weak_ptr<Item> item(boost::static_pointer_cast<Stockpile>(consIter->second)->FindItemByType(type, flags, value));
 			if (item.lock() && !item.lock()->Reserved()) {
-				int distance = Distance(item.lock()->Position(), target);
+				int distance = (flags & MOSTDECAYED ? item.lock()->GetDecay() : Distance(item.lock()->Position(), target));
 				if(distance < nearestDistance) {
 					nearestDistance = distance;
 					nearest = item;
@@ -1762,55 +1767,26 @@ boost::weak_ptr<Construction> Game::FindConstructionByTag(ConstructionTag tag, C
 }
 
 void Game::Reset() {
-	npcList.clear();
-	squadList.clear();
-	hostileSquadList.clear();
-
-	itemList.clear();
-	freeItems.clear();
-	flyingItems.clear();
-	stoppedItems.clear();
-	natureList.clear();
-	itemList.clear();
-
-	waterList.clear();
-	filthList.clear();
-	bloodList.clear();
-
-	Map::Inst()->Reset(undefined);
-	for (int x = 0; x < Map::Inst()->Width(); ++x) {
-		for (int y = 0; y < Map::Inst()->Height(); ++y) {
-			Map::Inst()->Reset(Coordinate(x,y));
-		}
-	}
-	staticConstructionList.clear();
-	dynamicConstructionList.clear();
-	JobManager::Inst()->Reset();
-	StockManager::Inst()->Reset();
-	time = 0;
-	age = 0;
-	orcCount = 0;
-	goblinCount = 0;
-	peacefulFaunaCount = 0;
-	paused = false;
-	toMainMenu = false;
-	running = false;
-	events = boost::shared_ptr<Events>(new Events(Map::Inst()));
-	season = LateWinter;
-	camX = 180;
-	camY = 180;
-	safeMonths = 3;
-	Announce::Inst()->Reset();
-	Camp::Inst()->Reset();
-	renderer->PreparePrefabs();
-	fireList.clear();
-	spellList.clear();
-	gameOver = false;
+	Map::Reset();
+	JobManager::Reset();
+	StockManager::Reset();
+	Announce::Reset();
+	Camp::Reset();
 	for (size_t i = 0; i < Faction::factions.size(); ++i) {
 		Faction::factions[i]->Reset();
 	}
+	Stats::Reset();
 
-	Stats::Inst()->Reset();
+	delete StockManagerDialog::stocksDialog;
+	StockManagerDialog::stocksDialog = 0;
+
+	delete Menu::mainMenu;
+	Menu::mainMenu = 0;
+
+	UI::Reset();
+
+	delete instance;
+	instance = 0;
 }
 
 NPCType Game::GetRandomNPCTypeByTag(std::string tag) {

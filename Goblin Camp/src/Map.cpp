@@ -274,37 +274,9 @@ bool Map::LineOfSight(const Coordinate& a, const Coordinate& b) {
 	return true;
 }
 
-void Map::Reset(const Coordinate& p) {
-	if (Map::IsInside(p)) {
-		tile(p).ResetType(TILEGRASS);
-		tile(p).SetWalkable(true);
-		tile(p).SetBuildable(true);
-		tile(p).SetConstruction(-1);
-		tile(p).SetWater(boost::shared_ptr<WaterNode>());
-		tile(p).SetLow(false);
-		tile(p).SetBlocksWater(false);
-		tile(p).SetBlocksLight(false);
-		tile(p).SetNatureObject(-1);
-		tile(p).itemList.clear();
-		tile(p).npcList.clear();
-		tile(p).SetFilth(boost::shared_ptr<FilthNode>());
-		tile(p).SetBlood(boost::shared_ptr<BloodNode>());
-		tile(p).marked = false;
-		tile(p).walkedOver = 0;
-		tile(p).corruption = 0;
-		tile(p).territory = false;
-		tile(p).burnt = 0;
-		tile(p).moveCost = 1;
-		tile(p).flow = NODIRECTION;
-		changedTiles.insert(p);
-		heightMap->setValue(p.X(),p.Y(),0.5f);
-	} else {
-		waterlevel = -0.8f;
-		overlayFlags = 0;
-		mapMarkers.clear();
-		markerids = 0;
-		weather.reset(new Weather(this));
-	}
+void Map::Reset() {
+	delete instance;
+	instance = 0;
 }
 
 void Map::Mark(const Coordinate& p) { tile(p).Mark(); }
@@ -630,22 +602,22 @@ void Map::CalculateFlow(int px[4], int py[4]) {
 		}
 	}
 
-        /* Calculate flow for all ground tiles
+	/* Calculate flow for all ground tiles
 
-           'flow' is used for propagation of filth over time, and
-           deplacement of objects in the river.
+	   'flow' is used for propagation of filth over time, and
+	   deplacement of objects in the river.
 
-           Flow is determined by the heightmap: each tile flows to its
-           lowest neighbor. When all neighbors have the same height,
-           we choose to flow towards the river, by picking a random
-           water tile and flowing toward it.
+	   Flow is determined by the heightmap: each tile flows to its
+	   lowest neighbor. When all neighbors have the same height,
+	   we choose to flow towards the river, by picking a random
+	   water tile and flowing toward it.
 
-           For algorithmic reason, we build a "cache" of the water
-           tiles list as a vector : picking a random water tile was
-           O(N) with the water list, causing noticeable delays during
-           map creation -- one minute or more -- while it is O(1) on
-           water arrays.
-         */
+	   For algorithmic reason, we build a "cache" of the water
+	   tiles list as a vector : picking a random water tile was
+	   O(N) with the water list, causing noticeable delays during
+	   map creation -- one minute or more -- while it is O(1) on
+	   water arrays.
+	 */
 	std::vector<boost::weak_ptr<WaterNode> > waterArray(Game::Inst()->waterList.begin(), Game::Inst()->waterList.end());
 
 	for (int y = 0; y < Height(); ++y) {
@@ -686,12 +658,7 @@ void Map::CalculateFlow(int px[4], int py[4]) {
 				}
 
 				if (tile(pos).flow == NODIRECTION && !waterArray.empty()) {
-					/* No slope here, so approximate towards river
-					   
-					   (gasche) if there is no water, the tile will stay NODIRECTION. Is this
-					   the expected behavior? Should we assert that there always are some
-					   water tiles?
-					*/
+					// No slope here, so approximate towards river
 					boost::weak_ptr<WaterNode> randomWater = Random::ChooseElement(waterArray);
 					Coordinate coord = randomWater.lock()->Position();
 					if (coord.X() < x) {
@@ -828,6 +795,9 @@ void Map::load(InputArchive& ar, const unsigned int version) {
 				float heightMapValue;
 				ar & heightMapValue;
 				heightMap->setValue(x, y, heightMapValue);
+
+				//Mark every tile as changed so the cached map gets completely updated on load
+				changedTiles.insert(Coordinate(x,y));
 			}
 		}
 	}

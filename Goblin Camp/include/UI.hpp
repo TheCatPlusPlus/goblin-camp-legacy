@@ -73,8 +73,10 @@ private:
 	void DrawTopBar(TCODConsole*);
 	void HandleKeyboard();
 	void HandleMouse();
+	boost::weak_ptr<Entity> currentStrobeTarget;
 public:
 	static UI* Inst();
+	static void Reset();
 	void Update();
 	void Draw(TCODConsole*);
 	void blueprint(const Coordinate&);
@@ -97,13 +99,13 @@ public:
 	static void ChooseChangeTerritory(bool add);
 	static void ChooseGatherItems();
 	static void ChooseNormalPlacement(boost::function<void(Coordinate)> callback,
-		boost::function<bool(Coordinate, Coordinate)> placement, int cursor);
+		boost::function<bool(Coordinate, Coordinate)> placement, int cursor, std::string optionalTooltip = "");
 	static void ChooseRectPlacement(boost::function<void(Coordinate, Coordinate)> rectCallback,
-		boost::function<bool(Coordinate, Coordinate)> placement, int cursor);
+		boost::function<bool(Coordinate, Coordinate)> placement, int cursor, std::string optionalTooltip = "");
 	static void ChooseRectPlacementCursor(boost::function<void(Coordinate, Coordinate)> rectCallback,
 		boost::function<bool(Coordinate, Coordinate)> placement, CursorType cursor);
 	static void ChooseABPlacement(boost::function<void(Coordinate)> callback,
-		boost::function<bool(Coordinate, Coordinate)> placement, int cursor);
+		boost::function<bool(Coordinate, Coordinate)> placement, int cursor, std::string optionalTooltip = "");
 	void SetCallback(boost::function<void(Coordinate)>);
 	void SetRectCallback(boost::function<void(Coordinate,Coordinate)>);
 	void SetPlacementCallback(boost::function<bool(Coordinate,Coordinate)>);

@@ -49,7 +49,7 @@ private:
 	void AnnouncementClicked(AnnounceMessage*);
 public:
 	static Announce* Inst();
-	void Reset();
+	static void Reset();
 	void AddMsg(std::string, TCODColor = TCODColor::white, const Coordinate& = undefined);
 	void Update();
 	MenuResult Update(int, int, bool);

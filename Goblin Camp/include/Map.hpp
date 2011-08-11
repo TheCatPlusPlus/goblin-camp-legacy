@@ -38,8 +38,8 @@ class Map : public ITCODPathCallback {
 	
 	Map();
 	static Map* instance;
-	mutable boost::multi_array<Tile, 2> tileMap;
-	mutable boost::multi_array<CacheTile, 2> cachedTileMap;
+	boost::multi_array<Tile, 2> tileMap;
+	boost::multi_array<CacheTile, 2> cachedTileMap;
 	Coordinate extent; //X->width, Y->height
 	float waterlevel;
 	int overlayFlags;
@@ -66,8 +66,7 @@ public:
 	TCODHeightMap *heightMap;
 	static Map* Inst();
 	~Map();
-	void Reset(const Coordinate&);
-
+	static void Reset();
 	float getWalkCost(const Coordinate&, const Coordinate&, void *) const;
 	float getWalkCost(int, int, int, int, void *) const;
 	//we must keep the int-version of getWalkCost as an override of ITCODPathCallback, otherwise Map is virtual

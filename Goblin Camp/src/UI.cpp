@@ -59,7 +59,8 @@ menuOpen(false),
 	draggingViewport(false),
 	draggingPlacement(false),
 	textMode(false),
-	inputString(std::string(""))
+	inputString(std::string("")),
+	currentStrobeTarget(boost::weak_ptr<Entity>())
 {
 	currentMenu = Menu::MainMenu();
 	menuHistory.reserve(10);
@@ -527,22 +528,42 @@ void UI::Draw(TCODConsole* console) {
 
 	Tooltip *tooltip = Tooltip::Inst();
 	tooltip->Clear();
+
 	if (extraTooltip != "") tooltip->AddEntry(TooltipEntry(extraTooltip, TCODColor::white));
 	if (menuOpen) {
 		currentMenu->GetTooltip(mouseInput.cx, mouseInput.cy, tooltip);
 	}
+
 	sideBar.GetTooltip(mouseInput.cx, mouseInput.cy, tooltip, console);
+
 	if (_state == UINORMAL && (!menuOpen || (currentMenu->Update(mouseInput.cx, mouseInput.cy, false, NO_KEY) & NOMENUHIT)) 
 		&& (sideBar.Update(mouseInput.cx, mouseInput.cy, false) & NOMENUHIT)
 		&& (Announce::Inst()->Update(mouseInput.cx, mouseInput.cy, false) & NOMENUHIT)
-		&& !underCursor.empty() && underCursor.begin()->lock()) {
+		&& !underCursor.empty()) {
+
+			if (boost::shared_ptr<Entity> strobeEntity = currentStrobeTarget.lock()) { strobeEntity->Strobe(); }
 			for (std::list<boost::weak_ptr<Entity> >::iterator ucit = underCursor.begin(); ucit != underCursor.end(); ++ucit) {
-				if (ucit->lock()) {
+				if (boost::shared_ptr<Entity> entity = ucit->lock()) {
 					Coordinate mouseLoc = Game::Inst()->TileAt(mouseInput.x, mouseInput.y);
-					ucit->lock()->GetTooltip(mouseLoc.X(), mouseLoc.Y(), tooltip);
+					entity->GetTooltip(mouseLoc.X(), mouseLoc.Y(), tooltip);
+
+					if (entity->CanStrobe()) {
+						if (boost::shared_ptr<Entity> strobeTarget = currentStrobeTarget.lock()) {
+							if (entity != strobeTarget) {
+								strobeTarget->ResetStrobe();
+							}
+						}
+						currentStrobeTarget = entity;
+					}
+							
 				}
 			}
+	} else if (boost::shared_ptr<Entity> strobeEntity = currentStrobeTarget.lock()) {
+		strobeEntity->ResetStrobe();
+		currentStrobeTarget.reset();
 	}
+
+
 	tooltip->Draw(mouseInput.cx, mouseInput.cy, console);
 }
 
@@ -616,9 +637,7 @@ void UI::DrawTopBar(TCODConsole* console) {
 }
 
 void UI::blueprint(const Coordinate& newBlue) {
-	//avoid funny reference sharing
-	Coordinate blueprint = newBlue;
-	_blueprint = blueprint;
+	_blueprint = newBlue;
 }
 void UI::state(UIState newState) { _state = newState; }
 
@@ -674,6 +693,7 @@ void UI::ChooseTreeFelling() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_TreeFelling);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Fell trees");
 }
 
 void UI::ChoosePlantHarvest() {
@@ -683,6 +703,7 @@ void UI::ChoosePlantHarvest() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Harvest);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Harvest plants");
 }
 
 void UI::ChooseOrderTargetCoordinate(boost::shared_ptr<Squad> squad, Order order) {
@@ -713,6 +734,7 @@ void UI::ChooseDesignateTree() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Tree);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Designate trees");
 }
 
 void UI::ChooseDismantle() {
@@ -722,6 +744,7 @@ void UI::ChooseDismantle() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Dismantle);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Dismantle");
 }
 
 void UI::ChooseUndesignate() {
@@ -731,6 +754,7 @@ void UI::ChooseUndesignate() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Undesignate);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Undesignate");
 }
 
 void UI::ChooseDesignateBog() {
@@ -740,6 +764,7 @@ void UI::ChooseDesignateBog() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Bog);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Designate bog");
 }
 
 
@@ -877,6 +902,7 @@ void UI::ChooseDig() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Dig);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Dig");
 }
 
 void UI::ChooseNaturify() {
@@ -896,6 +922,7 @@ void UI::ChooseChangeTerritory(bool add) {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(add ? Cursor_AddTerritory : Cursor_RemoveTerritory);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip(add ? "Expand" : "Shrink");
 }
 
 void UI::ChooseGatherItems() {
@@ -905,22 +932,31 @@ void UI::ChooseGatherItems() {
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(Cursor_Gather);
 	UI::Inst()->HideMenu();
+	UI::Inst()->SetExtraTooltip("Gather items");
 }
 
-void UI::ChooseNormalPlacement(boost::function<void(Coordinate)> callback, boost::function<bool(Coordinate, Coordinate)> placement, int cursor) {
+void UI::ChooseNormalPlacement(boost::function<void(Coordinate)> callback, boost::function<bool(Coordinate, Coordinate)> placement, int cursor, std::string optionalTooltip) {
 	UI::Inst()->state(UIPLACEMENT);
 	UI::Inst()->SetCallback(callback);
 	UI::Inst()->SetPlacementCallback(placement);
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(cursor);
+	if (optionalTooltip.length() > 0) {
+		UI::Inst()->HideMenu();
+		UI::Inst()->SetExtraTooltip(optionalTooltip);
+	}
 }
 
-void UI::ChooseRectPlacement(boost::function<void(Coordinate, Coordinate)> rectCallback, boost::function<bool(Coordinate, Coordinate)> placement, int cursor) {
+void UI::ChooseRectPlacement(boost::function<void(Coordinate, Coordinate)> rectCallback, boost::function<bool(Coordinate, Coordinate)> placement, int cursor, std::string optionalTooltip) {
 	UI::Inst()->state(UIRECTPLACEMENT);
 	UI::Inst()->SetRectCallback(rectCallback);
 	UI::Inst()->SetPlacementCallback(placement);
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(cursor);
+	if (optionalTooltip.length() > 0) {
+		UI::Inst()->HideMenu();
+		UI::Inst()->SetExtraTooltip(optionalTooltip);
+	}
 }
 
 void UI::ChooseRectPlacementCursor(boost::function<void(Coordinate, Coordinate)> rectCallback, boost::function<bool(Coordinate, Coordinate)> placement, CursorType cursor) {
@@ -931,14 +967,23 @@ void UI::ChooseRectPlacementCursor(boost::function<void(Coordinate, Coordinate)>
 	Game::Inst()->Renderer()->SetCursorMode(cursor);
 }
 
-void UI::ChooseABPlacement(boost::function<void(Coordinate)> callback, boost::function<bool(Coordinate, Coordinate)> placement, int cursor) {
+void UI::ChooseABPlacement(boost::function<void(Coordinate)> callback, boost::function<bool(Coordinate, Coordinate)> placement, int cursor, std::string optionalTooltip) {
 	UI::Inst()->state(UIABPLACEMENT);
 	UI::Inst()->SetCallback(callback);
 	UI::Inst()->SetPlacementCallback(placement);
 	UI::Inst()->blueprint(Coordinate(1,1));
 	Game::Inst()->Renderer()->SetCursorMode(cursor);
+	if (optionalTooltip.length() > 0) {
+		UI::Inst()->HideMenu();
+		UI::Inst()->SetExtraTooltip(optionalTooltip);
+	}
 }
 
 void UI::SetExtraTooltip(std::string tooltip) {
 	extraTooltip = tooltip;
+}
+
+void UI::Reset() {
+	delete instance;
+	instance = 0;
 }

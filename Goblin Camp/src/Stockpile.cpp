@@ -330,6 +330,11 @@ void Stockpile::Draw(Coordinate upleft, TCODConsole* console) {
 				if (screenx >= 0 && screenx < console->getWidth() && screeny >= 0 &&
 					screeny < console->getHeight()) {
 						if (dismantle) console->setCharBackground(screenx,screeny, TCODColor::darkGrey);
+						else {
+						  int gray = static_cast<int>(50 - cos(strobe) * 50);
+						  console->setCharBackground(screenx, screeny, TCODColor(gray, gray, gray));
+						}
+
 						console->setCharForeground(screenx, screeny, colors[p]);
 						console->setChar(screenx, screeny, (graphic[1]));
 
@@ -337,6 +342,9 @@ void Stockpile::Draw(Coordinate upleft, TCODConsole* console) {
 							boost::weak_ptr<Item> item = *containers[p]->begin();
 							if (item.lock()) {
 								item.lock()->Draw(upleft, console);
+								TCODColor bgColor = console->getCharBackground(screenx, screeny);
+								bgColor.setValue(std::min(1.0, static_cast<double>(bgColor.getValue() - ((cos(strobe) - 1) / 10))));
+								console->setCharBackground(screenx, screeny, bgColor);
 							}
 						}
 				}

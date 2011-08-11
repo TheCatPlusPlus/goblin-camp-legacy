@@ -156,8 +156,10 @@ void Construction::Draw(Coordinate upleft, TCODConsole* console) {
 	int height = (graphic.size() - 1) / width;
 	if (screenx + width - 1 >= 0 && screenx < console->getWidth() && screeny + height - 1 >= 0 && screeny < console->getHeight()) {
 		for (int i = 1; i < (signed int)graphic.size(); ++i) {
-			if(screenx + i - 1 >= 0 && screeny >= 0) {
-				if (dismantle) console->setCharBackground(screenx+i-1,screeny, TCODColor::darkGrey);
+			if(screenx + i - 1 >= 0 && screeny >= 0 && screenx + i - 1 < console->getWidth() && screeny < console->getHeight()) {
+				if (dismantle) console->setCharBackground(screenx+i-1, screeny, TCODColor::darkGrey);
+				else console->setCharBackground(screenx+i-1, screeny,  TCODColor((int)(50 - cos(strobe) * 50), (int)(50 - cos(strobe) * 50), (int)(50 - cos(strobe) * 50)));
+
 				console->setCharForeground(screenx+i-1,screeny, color);
 				if (condition > i*-10) console->setChar(screenx+i-1,screeny, (graphic[i]));
 				else console->setChar(screenx+i-1,screeny, TCOD_CHAR_BLOCK2);
@@ -1002,6 +1004,8 @@ void Construction::BurnToTheGround() {
 }
 
 int Construction::GetMoveSpeedModifier() { return Construction::Presets[type].moveSpeedModifier; }
+
+bool Construction::CanStrobe() { return true; }
 
 void Construction::save(OutputArchive& ar, const unsigned int version) const {
 	ar & boost::serialization::base_object<Entity>(*this);

@@ -45,7 +45,7 @@ Events::Events(Map* vmap) :
 			peacefulAnimals.push_back(i);
 		if (NPC::Presets[i].tags.find("immigrant") != NPC::Presets[i].tags.end())
 			immigrants.push_back(i);
-				if (NPC::Presets[i].tags.find("migratory") != NPC::Presets[i].tags.end())
+		if (NPC::Presets[i].tags.find("migratory") != NPC::Presets[i].tags.end())
 			migratingAnimals.push_back(i);
 		}
 }
