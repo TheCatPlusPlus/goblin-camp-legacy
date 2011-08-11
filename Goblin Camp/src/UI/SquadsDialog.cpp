@@ -16,6 +16,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "stdafx.hpp"
 
 #include <string>
+#include <cassert>
 
 #include <libtcod.hpp>
 #include <boost/lexical_cast.hpp>
@@ -47,9 +48,9 @@ SquadsDialog* SquadsDialog::SquadDialog() {
 		squadDialog->rightFrame->AddComponent(new Label("Name (required)", 12, 2));
 		squadDialog->rightFrame->AddComponent(new TextBox(1, 3, 22, &(squadDialog->squadName)));
 		squadDialog->rightFrame->AddComponent(new Label("Members", 12, 5));
-		squadDialog->rightFrame->AddComponent(new Spinner(1, 6, 22, &(squadDialog->squadMembers), 1, INT_MAX));
+		squadDialog->rightFrame->AddComponent(new Spinner(1, 6, 22, &(squadDialog->squadMembers), 1, std::numeric_limits<int>::max()));
 		squadDialog->rightFrame->AddComponent(new Label("Priority", 12, 8));
-		squadDialog->rightFrame->AddComponent(new Spinner(1, 9, 22, &(squadDialog->squadPriority), 0, INT_MAX));
+		squadDialog->rightFrame->AddComponent(new Spinner(1, 9, 22, &(squadDialog->squadPriority), 0, std::numeric_limits<int>::max()));
 		Button *create = new Button("Create", boost::bind(&SquadsDialog::CreateSquad, squadDialog), 2, 11, 10);
 		create->SetVisible(boost::bind(&SquadsDialog::SquadSelected, squadDialog, false));
 		Button *modify = new Button("Modify", boost::bind(&SquadsDialog::ModifySquad, squadDialog), 2, 11, 10);
@@ -96,6 +97,7 @@ void SquadsDialog::DrawSquad(std::pair<std::string, boost::shared_ptr<Squad> > s
 void SquadsDialog::GetSquadTooltip(std::pair<std::string, boost::shared_ptr<Squad> > squadi, Tooltip *tooltip) {
 	tooltip->AddEntry(TooltipEntry(squadi.first, TCODColor::white));
 	tooltip->AddEntry(TooltipEntry((boost::format(" Priority: %d") % squadi.second->Priority()).str(), TCODColor::grey));
+
 	if(squadi.second->GetGeneralOrder() != NOORDER) {
 		std::string order;
 		switch (squadi.second->GetGeneralOrder()) {
@@ -108,6 +110,9 @@ void SquadsDialog::GetSquadTooltip(std::pair<std::string, boost::shared_ptr<Squa
 		case FOLLOW:
 			order = "Follow";
 			break;
+		case NOORDER:
+			//unreachable as we tested '!= NOORDER'
+			assert(false);
 		}
 		tooltip->AddEntry(TooltipEntry((boost::format(" Orders: %s") % order).str(), TCODColor::grey));
 	}
