@@ -18,7 +18,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "Blood.hpp"
 #include "Coordinate.hpp"
 
-BloodNode::BloodNode(int nx, int ny, int ndep) : x(nx), y(ny), depth(ndep)
+BloodNode::BloodNode(const Coordinate& pos, int ndep) : pos(pos), depth(ndep)
 {
 }
 
@@ -32,9 +32,11 @@ void BloodNode::Draw(Coordinate upleft, TCODConsole* console) {
 
 int BloodNode::Depth() {return depth;}
 void BloodNode::Depth(int val) {depth=val;}
-Coordinate BloodNode::Position() {return Coordinate(x,y);}
+Coordinate BloodNode::Position() {return pos;}
 
 void BloodNode::save(OutputArchive& ar, const unsigned int version) const {
+	const int x = pos.X();
+	const int y = pos.Y();
 	ar & x;
 	ar & y;
 	ar & depth;
@@ -45,8 +47,10 @@ void BloodNode::save(OutputArchive& ar, const unsigned int version) const {
 }
 
 void BloodNode::load(InputArchive& ar, const unsigned int version) {
+	int x, y;
 	ar & x;
 	ar & y;
+	pos = Coordinate(x,y);
 	ar & depth;
 	ar & graphic;
 	ar & color.r;
