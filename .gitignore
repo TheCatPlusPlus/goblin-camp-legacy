@@ -1,10 +1,8 @@
-syntax: glob
-
 *.suo
 *.user
 *.FileListAbsolute.txt
-*\bin\*
-*\obj\*
+bin/
+obj/
 *.ncb
 *.nlb
 *.aps
@@ -27,16 +25,16 @@ syntax: glob
 *.sbr
 *.scc
 *.sig
-_ReSharper*\*
-TestResults\*
+_ReSharper*/
+TestResults/
 desktop.ini
-ipch\*
+ipch/
 *.sdf
 *.opensdf
 *.vsp
 *.psess
-Release\
-Debug\
+Release/
+Debug/
 *.cd
 *SyncToy*
 Log.txt
@@ -44,13 +42,9 @@ Log.txt
 screenshot*.png
 *.filters
 *.sav
-ccccReport\
-build\tmp
-build\bin-*
-build\installer-*
-build\dist
+ccccReport/
+build/
 *.py[co]
-build\msvc
 user-config.jam
 *.exp
 *.orig*
@@ -67,11 +61,11 @@ user-config.jam
 *.xcbkptlist
 xcuserdata
 gc-config.jam
-docs\internals
-docs\sphinx\_build
+docs/internals
+docs/sphinx/_build
 userdata
 *.sln
 *.vcxproj
-relre:depend
-relre:goblin-camp.std(?:out|err)$
+goblin-camp.stdout
+goblin-camp.stderr
 Goblin Camp/linker.props
