@@ -451,13 +451,10 @@ void Game::BumpEntity(int uid) {
 void Game::DoNothing() {}
 
 void Game::Exit(bool confirm) {
-	//boost::function<void()> exitFunc = boost::bind(&Game::Running, Game::Inst(), false);
-	boost::function<void()> exitFunc = boost::bind(&exit, 0);
-
 	if (confirm) {
-		MessageBox::ShowMessageBox("Really exit?", exitFunc, "Yes", NULL, "No");
+		MessageBox::ShowMessageBox("Really exit?", [] { exit(0); }, "Yes", NULL, "No");
 	} else {
-		exitFunc();
+		exit(0);
 	}
 }
 
