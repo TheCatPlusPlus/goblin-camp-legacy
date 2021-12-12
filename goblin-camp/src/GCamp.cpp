@@ -576,7 +576,7 @@ void SettingsMenu() {
 	std::string width        = Config::GetStringCVar("resolutionX");
 	std::string height       = Config::GetStringCVar("resolutionY");
 	TCOD_renderer_t renderer = static_cast<TCOD_renderer_t>(Config::GetCVar<int>("renderer"));
-	bool useTileset          = Config::GetCVar<bool>("useTileset");
+	bool useTileset          = false; // Config::GetCVar<bool>("useTileset");
 	bool fullscreen          = Config::GetCVar<bool>("fullscreen");
 	bool tutorial            = Config::GetCVar<bool>("tutorial");
 	bool translucentUI       = Config::GetCVar<bool>("translucentUI");
@@ -592,9 +592,11 @@ void SettingsMenu() {
 	const int y = Game::Inst()->ScreenHeight()/2 - (h / 2);
 
 	SettingRenderer renderers[] = {
+#if 0
 		{ "GLSL Tileset",	TCOD_RENDERER_GLSL   , true},
 		{ "OpenGL Tileset",	TCOD_RENDERER_OPENGL , true},
 		{ "Tileset",		TCOD_RENDERER_SDL    , true},
+#endif
 		{ "GLSL",			TCOD_RENDERER_GLSL   , false},
 		{ "OpenGL",			TCOD_RENDERER_OPENGL , false},
 		{ "SDL",			TCOD_RENDERER_SDL    , false}

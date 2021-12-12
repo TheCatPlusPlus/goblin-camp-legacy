@@ -602,6 +602,7 @@ void Game::ResetRenderer() {
 
 	renderer.reset();
 
+#if 0
 	if (Config::GetCVar<bool>("useTileset")) {
 		std::string tilesetName = Config::GetStringCVar("tileset");
 		if (tilesetName.size() == 0) tilesetName = "default";
@@ -616,6 +617,10 @@ void Game::ResetRenderer() {
 	} else {
 		renderer = boost::shared_ptr<MapRenderer>(new TCODMapRenderer(buffer));
 	}
+#endif
+
+	// XXX tileset renderers are broken
+	renderer = boost::make_shared<TCODMapRenderer>(buffer);
 
 	buffer->setDirty(0,0,buffer->getWidth(), buffer->getHeight());
 	if (running) {
