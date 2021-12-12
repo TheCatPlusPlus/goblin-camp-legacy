@@ -194,9 +194,9 @@ boost::weak_ptr<Job> NPC::currentJob() const { return jobs.empty() ? boost::weak
 
 void NPC::TaskFinished(TaskResult result, std::string msg) {
 #ifdef DEBUG
-	if (msg.size() > 0) {
-		std::cout<<name<<":"<<msg<<"\n";
-	}
+	// if (msg.size() > 0) {
+	// 	std::cout<<name<<":"<<msg<<"\n";
+	// }
 #endif
 	RemoveEffect(EATING);
 	RemoveEffect(DRINKING);
