@@ -55,7 +55,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #	if defined(_MSC_VER)
 #		pragma warning(push, 2)
 #	endif
-#		include <boost/thread/thread.hpp>
 #		include <boost/multi_array.hpp>
 #		include <boost/shared_ptr.hpp>
 #		include <boost/weak_ptr.hpp>

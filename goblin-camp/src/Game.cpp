@@ -20,13 +20,16 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <cassert>
 #endif
 
+#include <thread>
+#include <future>
+#include <chrono>
+
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/set.hpp>
 #include <boost/serialization/shared_ptr.hpp>
 #include <boost/serialization/weak_ptr.hpp>
 #include <boost/serialization/vector.hpp>
-#include <boost/thread.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/algorithm/string.hpp>
 
@@ -480,8 +483,8 @@ namespace {
 	const unsigned savingSize  = sizeof saving  / sizeof saving[0];
 	
 	void DrawProgressScreen(int x, int y, int spin, bool isLoading) {
-		boost::lock_guard<boost::mutex> lock(Game::loadingScreenMutex);
-		
+		std::unique_lock lock(Game::loadingScreenMutex);
+
 		SDL_PumpEvents();
 		
 		std::string loadingMsg = (isLoading ? loading : saving)[spin % (isLoading ? loadingSize : savingSize)];
@@ -495,7 +498,7 @@ namespace {
 	}
 }
 
-boost::mutex Game::loadingScreenMutex;
+std::mutex Game::loadingScreenMutex;
 
 void Game::ProgressScreen(boost::function<void(void)> blockingCall, bool isLoading) {
 	// this runs blocking call in a separate thread while spinning on the main one
@@ -505,37 +508,42 @@ void Game::ProgressScreen(boost::function<void(void)> blockingCall, bool isLoadi
 	// locking Game::loadingScreenMutex first!
 	//
 	// XXX heavily experimental
-	boost::promise<void> promise;
-	boost::unique_future<void> future(promise.get_future());
-	
+	std::promise<void> promise;
+	std::future<void> future(promise.get_future());
+
 	// make copies before launching the thread
 	int x = Game::Inst()->screenWidth  / 2;
 	int y = Game::Inst()->screenHeight / 2;
 	
 	DrawProgressScreen(x, y, 0, isLoading);
-	
-	boost::thread thread([&]() {
+
+	std::thread thread([&]() {
 		try {
 			blockingCall();
 			promise.set_value();
-		} catch (const std::exception& e) {
-			promise.set_exception(boost::copy_exception(e));
+		} catch (const std::exception&) {
+			promise.set_exception(std::current_exception());
 		}
 	});
-	
+
+	thread.detach();
+
 	int spin = 0;
-	do {
+	while (true) {
+		auto status = future.wait_for(std::chrono::milliseconds(500));
+		if (status == std::future_status::ready) {
+			break;
+		}
+
 		DrawProgressScreen(x, y, ++spin, isLoading);
-	} while (!future.timed_wait(boost::posix_time::millisec(500)));
-	
-	if (future.has_exception()) {
-		future.get();
 	}
+
+	future.get();
 }
 
 void Game::ErrorScreen() {
-	boost::lock_guard<boost::mutex> lock(loadingScreenMutex);
-	
+	std::unique_lock lock(loadingScreenMutex);
+
 	Game *game = Game::Inst();
 	TCODConsole::root->setDefaultForeground(TCODColor::white);
 	TCODConsole::root->setDefaultBackground(TCODColor::black);

@@ -17,8 +17,8 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 
 #include <queue>
 #include <list>
+#include <mutex>
 
-#include <boost/thread/thread.hpp>
 #include <boost/multi_array.hpp>
 #include <boost/function.hpp>
 #include <boost/weak_ptr.hpp>
@@ -118,7 +118,7 @@ class NPC : public Entity {
 	int taskIndex;
 	int orderIndex;
 
-	boost::mutex pathMutex;
+	std::mutex pathMutex;
 	TCODPath *path;
 	int pathIndex;
 	bool nopath;
@@ -290,7 +290,7 @@ public:
 	static void AnimalReact(boost::shared_ptr<NPC>);
 	
 	static unsigned int pathingThreadCount;
-	static boost::mutex threadCountMutex;
+	static std::mutex threadCountMutex;
 
 	void AddTrait(Trait);
 	void RemoveTrait(Trait);
