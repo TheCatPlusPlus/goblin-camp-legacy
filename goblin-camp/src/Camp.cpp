@@ -18,6 +18,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <boost/serialization/set.hpp>
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/weak_ptr.hpp>
+#include <boost/next_prior.hpp>
 
 #include "Camp.hpp"
 #include "Coordinate.hpp"

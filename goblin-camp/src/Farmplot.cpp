@@ -16,6 +16,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "stdafx.hpp"
 
 #include <boost/serialization/map.hpp>
+#include <boost/next_prior.hpp>
 
 #include "Random.hpp"
 #include "Farmplot.hpp"
