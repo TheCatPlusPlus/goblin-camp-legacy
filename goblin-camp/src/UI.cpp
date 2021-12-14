@@ -41,7 +41,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "UI/AnnounceDialog.hpp"
 #include "UI/Tooltip.hpp"
 #include "UI/JobDialog.hpp"
-#include "UI/DevConsole.hpp"
 
 UI* UI::instance = 0;
 
@@ -129,8 +128,6 @@ void UI::HandleKeyboard() {
 				Game::Inst()->Pause();
 			} else if (key.c == keyMap["Jobs"]) {
 				ChangeMenu(JobDialog::JobListingDialog());
-			} else if (Game::Inst()->DevMode() && key.c == keyMap["DevConsole"]) {
-				ShowDevConsole();
 			} else if (key.c == keyMap["TerrainOverlay"]) {
 				if (Map::Inst()->GetOverlayFlags() & TERRAIN_OVERLAY) Map::Inst()->RemoveOverlay(TERRAIN_OVERLAY);
 				else Map::Inst()->AddOverlay(TERRAIN_OVERLAY);

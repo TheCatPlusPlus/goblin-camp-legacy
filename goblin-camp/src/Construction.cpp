@@ -46,7 +46,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "UI.hpp"
 #include "UI/ConstructionDialog.hpp"
 #include "Item.hpp"
-#include "scripting/Event.hpp"
 #include "Faction.hpp"
 #include "Stockpile.hpp"
 #include "Stats.hpp"
@@ -233,8 +232,6 @@ int Construction::Build() {
 		else Camp::Inst()->LockCenter(Center());
 		Camp::Inst()->ConstructionBuilt(type);
 		Stats::Inst()->ConstructionBuilt(Construction::Presets[type].name);
-
-		Script::Event::BuildingCreated(boost::static_pointer_cast<Construction>(shared_from_this()), pos.X(), pos.Y());
 	}
 	return condition;
 }

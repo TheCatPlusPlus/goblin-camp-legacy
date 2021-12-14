@@ -31,7 +31,6 @@ namespace fs = boost::filesystem;
 #include "Item.hpp"
 #include "NatureObject.hpp"
 #include "NPC.hpp"
-#include "scripting/Engine.hpp"
 #include "Faction.hpp"
 
 namespace Globals {
@@ -136,8 +135,8 @@ namespace {
 		LOG_FUNC("Trying to load mod '" << mod << "' from " << dir.string(), "LoadMod");
 		
 		// Removed magic apiVersion in favour of reusing already-hardcoded 'required' code path.
-		Mods::Metadata metadata(mod, mod, "", "1.0", (required ? Script::version : -1));
-		
+		Mods::Metadata metadata(mod, mod, "", "1.0", -1);
+
 		if (fs::exists(dir / "mod.dat")) {
 			LOG_FUNC("Loading metadata.", "LoadMod");
 			LoadMetadata(metadata, (dir / "mod.dat"));
@@ -151,23 +150,15 @@ namespace {
 			LoadFile("names",         dir, LoadNames, required);
 			LoadFile("creatures",     dir, NPC::LoadPresets, required);
 			LoadFile("factions",      dir, Faction::LoadPresets, required);
-		} catch (const std::runtime_error& e) {
-			LOG_FUNC("Failed to load mod due to std::runtime_error: " << e.what(), "LoadMod");
+		} catch (const std::exception& e) {
+			LOG_FUNC("Failed to load mod: " << e.what(), "LoadMod");
 			if (required) Game::Inst()->ErrorScreen();
 		}
 		std::list<TilesetModMetadata> tilesetMods = TileSetLoader::LoadTilesetModMetadata(dir);
 		for (std::list<TilesetModMetadata>::iterator iter = tilesetMods.begin(); iter != tilesetMods.end(); ++iter) {
 			Globals::availableTilesetMods.push_back(*iter);
 		}
-		
-		if (metadata.apiVersion != -1) {
-			if (metadata.apiVersion != Script::version) {
-				LOG_FUNC("WARNING: Ignoring mod scripts because of an incorrect API version.", "LoadMod");
-			} else {
-				Script::LoadScript(mod, dir.string());
-			}
-		}
-		
+
 		Globals::loadedMods.push_back(metadata);
 	}
 }

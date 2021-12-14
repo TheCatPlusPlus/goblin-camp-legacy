@@ -27,18 +27,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 // precompiled header
 #if defined(BOOST_BUILD_PCH_ENABLED) && !defined(GC_SKIP_PCH)
 
-//we include python stuff first to avoid _C_POSIX_SOURCE redefinition warnings
-//see: http://bytes.com/topic/python/answers/30009-warning-_posix_c_source-redefined
-#	if defined(_MSC_VER)
-#		pragma warning(push, 2)
-#	endif
-#	include <boost/python/detail/wrap_python.hpp>
-#	include <boost/python.hpp>
-	namespace py = boost::python;
-#	if defined(_MSC_VER)
-#		pragma warning(pop)
-#	endif
-
 // STL
 #	include <vector>
 #	include <deque>
@@ -67,8 +55,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #	if defined(_MSC_VER)
 #		pragma warning(push, 2)
 #	endif
-#		include <boost/python/detail/wrap_python.hpp>
-#		include <boost/python.hpp>
 #		include <boost/thread/thread.hpp>
 #		include <boost/multi_array.hpp>
 #		include <boost/shared_ptr.hpp>

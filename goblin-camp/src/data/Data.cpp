@@ -27,10 +27,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <boost/lexical_cast.hpp>
 #include <boost/bind.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/python/detail/wrap_python.hpp>
-#include <boost/python.hpp>
 
-namespace py = boost::python;
 namespace fs = boost::filesystem;
 
 #include "data/Config.hpp"
@@ -39,8 +36,6 @@ namespace fs = boost::filesystem;
 #include "Logger.hpp"
 #include "UI/MessageBox.hpp"
 #include "Game.hpp"
-#include "scripting/Event.hpp"
-#include "scripting/Engine.hpp"
 
 namespace {
 	/**
@@ -119,10 +114,8 @@ namespace {
 	*/
 	void DoSave(std::string file, bool& result) {
 		LOG_FUNC("Saving game to " << file, "DoSave");
-		
-		if ((result = Game::Inst()->SaveGame(file))) {
-			Script::Event::GameSaved(file);
-		}
+
+		Game::Inst()->SaveGame(file);
 	}
 	
 	/**
@@ -233,11 +226,8 @@ namespace Data {
 	bool LoadGame(const std::string& save) {
 		std::string file = (Paths::Get(Paths::Saves) / save).string() + ".sav";
 		LOG("Loading game from " << file);
-		
-		if (!Game::Inst()->LoadGame(file)) return false;
-		Script::Event::GameLoaded(file);
-		
-		return true;
+
+		return Game::Inst()->LoadGame(file);
 	}
 	
 	/**
@@ -276,20 +266,6 @@ namespace Data {
 		Executes the user's configuration file.
 	*/
 	void LoadConfig() {
-		LOG("Loading user config.");
-		const fs::path& config = Paths::Get(Paths::Config);
-		CreateDefault(config, "## Goblin Camp default empty configuration file");
-		
-		py::object globals = py::import("_gcampconfig").attr("__dict__");
-		py::object locals  = py::import("__gcuserconfig__").attr("__dict__");
-		try {
-			py::exec_file(config.string().c_str(), globals, locals);
-		} catch (const py::error_already_set&) {
-			LOG("Cannot load user config.");
-			Script::LogException();
-			return;
-		}
-		
 		atexit(SaveConfig);
 	}
 	

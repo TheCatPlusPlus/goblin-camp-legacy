@@ -29,9 +29,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <boost/thread.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/python/detail/wrap_python.hpp>
-#include <boost/python.hpp>
-namespace py = boost::python;
 
 #include "Random.hpp"
 #include "Game.hpp"
@@ -49,8 +46,6 @@ namespace py = boost::python;
 #include "Farmplot.hpp"
 #include "Door.hpp"
 #include "data/Config.hpp"
-#include "scripting/Engine.hpp"
-#include "scripting/Event.hpp"
 #include "SpawningPool.hpp"
 #include "Camp.hpp"
 #include "MapMarker.hpp"
@@ -246,8 +241,6 @@ ContinuePlaceStockpile:
 	}
 
 	Game::Inst()->RefreshStockpiles();
-
-	Script::Event::BuildingCreated(newSp, a.X(), a.Y());
 
 	//Spawning a BUILD job is not required because stockpiles are created "built"
 	return newSp->Uid();
@@ -633,8 +626,6 @@ void Game::RemoveConstruction(boost::weak_ptr<Construction> cons) {
 		} else {
 			Game::Inst()->staticConstructionList.erase(construct->Uid());
 		}
-
-		Script::Event::BuildingDestroyed(cons, construct->X(), construct->Y());
 	}
 }
 
@@ -706,8 +697,6 @@ int Game::CreateItem(Coordinate pos, ItemType type, bool store, int ownerFaction
 			}
 
 			if (store) StockpileItem(newItem, false, true);
-
-			Script::Event::ItemCreated(newItem, pos.X(), pos.Y());
 
 #ifdef DEBUG
 			std::cout<<newItem->name<<"("<<newItem->Uid()<<") created\n";
@@ -1072,8 +1061,8 @@ void Game::Update() {
 		if (--delit->first <= 0) {
 			try {
 				delit->second();
-			} catch (const py::error_already_set&) {
-				Script::LogException();
+			} catch (const std::exception& e) {
+				LOG("Exception in delayed function: " << e.what());
 			}
 			delit = delays.erase(delit);
 		} else ++delit;

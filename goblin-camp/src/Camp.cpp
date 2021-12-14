@@ -23,7 +23,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "Coordinate.hpp"
 #include "Game.hpp"
 #include "Announce.hpp"
-#include "scripting/Event.hpp"
 #include "Random.hpp"
 #include "JobManager.hpp"
 #include "Stats.hpp"
@@ -157,7 +156,6 @@ void Camp::UpdateTier() {
 
 		Announce::Inst()->AddMsg("Your "+oldName+" is now " + article + " " + name + "!", 
 			positive ? TCODColor::lightGreen : TCODColor::yellow);
-		Script::Event::TierChanged(tier, name);
 	}
 }
 

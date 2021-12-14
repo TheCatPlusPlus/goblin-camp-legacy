@@ -42,8 +42,6 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include "data/Tilesets.hpp"
 #include "NPC.hpp"
 #include "Item.hpp"
-#include "scripting/Engine.hpp"
-#include "scripting/Event.hpp"
 #include "Weather.hpp"
 #include "StockManager.hpp"
 #include "JobManager.hpp"
@@ -73,8 +71,7 @@ int GCMain(std::vector<std::string>& args) {
 	Paths::Init();
 	Random::Init();
 	Config::Init();
-	Script::Init(args);
-	
+
 	//
 	// Load phase.
 	//
@@ -115,8 +112,7 @@ int GCMain(std::vector<std::string>& args) {
 	//
 	// Shutdown.
 	//
-	Script::Shutdown();
-	
+
 	#ifdef CHK_MEMORY_LEAKS
 		// Pull down the singletons. Unnecessary but eases memory leak detection
 		delete Game::Inst();
@@ -167,8 +163,6 @@ void MainLoop() {
 		startMilli = TCODSystem::getElapsedMilli();
 		if (elapsedMilli < targetMilli) TCODSystem::sleepMilli(targetMilli - elapsedMilli);
 	}
-	
-	Script::Event::GameEnd();
 }
 
 void StartNewGame() {
@@ -300,8 +294,7 @@ void ConfirmStartNewGame() {
 	} else {
 		run();
 	}
-	
-	Script::Event::GameStart();
+
 	MainLoop();
 }
 

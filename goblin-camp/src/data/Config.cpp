@@ -50,20 +50,7 @@ namespace Config {
 	*/
 	void Save() {
 		std::ofstream config(Paths::Get(Paths::Config).string().c_str());
-		config << "##\n";
-		config << "## Config automatically saved on " << boost::posix_time::second_clock::local_time() << '\n';
-		config << "##\n";
-		
-		// dump cvars
-		BOOST_FOREACH(CVarMap::value_type pair, Globals::cvars) {
-			config << "setCVar('" << pair.first << "', '" << pair.second << "')\n";
-		}
-		
-		// dump keys
-		BOOST_FOREACH(KeyMap::value_type pair, Globals::keys) {
-			config << "bindKey('" << pair.first << "', '" << pair.second << "')\n";
-		}
-		
+
 		config.close();
 	}
 	
