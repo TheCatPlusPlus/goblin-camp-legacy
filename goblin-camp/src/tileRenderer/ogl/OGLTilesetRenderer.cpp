@@ -222,7 +222,7 @@ Sprite_ptr OGLTilesetRenderer::CreateSprite(boost::shared_ptr<TileSetTexture> ti
 	if (tilesetTexture->Count() <= tile) {
 		return Sprite_ptr();
 	}
-	RawTileData rawTile = {tile, tilesetTexture};
+	RawTileData rawTile = {static_cast<unsigned>(tile), tilesetTexture};
 	rawTileIterator existing = std::find(rawTiles.begin(), rawTiles.end(), rawTile);
 	if (existing != rawTiles.end()) {
 		return Sprite_ptr(new OGLSprite(this, existing - rawTiles.begin()));
@@ -240,7 +240,7 @@ Sprite_ptr OGLTilesetRenderer::CreateSprite(boost::shared_ptr<TileSetTexture> ti
 	std::vector<int> tileIds;
 	for (std::vector<int>::const_iterator tileIter = tiles.begin(); tileIter != tiles.end(); ++tileIter) {
 		if (*tileIter < tilesetTexture->Count()) {
-			RawTileData rawTile = {*tileIter, tilesetTexture};
+			RawTileData rawTile = {static_cast<unsigned>(*tileIter), tilesetTexture};
 			rawTileIterator existing = std::find(rawTiles.begin(), rawTiles.end(), rawTile);
 			if (existing != rawTiles.end()) {
 				tileIds.push_back(existing - rawTiles.begin());
