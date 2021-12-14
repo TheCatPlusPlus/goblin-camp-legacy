@@ -27,6 +27,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <boost/lexical_cast.hpp>
 #include <boost/bind.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/json.hpp>
 
 namespace fs = boost::filesystem;
 
@@ -266,6 +267,33 @@ namespace Data {
 		Executes the user's configuration file.
 	*/
 	void LoadConfig() {
+		std::ifstream fp;
+		fp.exceptions(std::ios::badbit | std::ios::failbit);
+
+		try {
+			std::stringstream buffer;
+
+			fp.open(Paths::Get(Paths::Config).string());
+			buffer << fp.rdbuf();
+
+			auto config = boost::json::parse(buffer.str()).as_object();
+			auto cvars = config.at("cvars").as_object();
+			auto keys = config.at("keys").as_object();
+
+			for (auto&& [name, value] : cvars) {
+				Config::SetStringCVar(name.to_string(), value.as_string().c_str());
+			}
+
+			for (auto&& [name, value] : keys) {
+				Config::SetKey(name.to_string(), value.as_string().at(0));
+			}
+
+			fp.close();
+
+		} catch (const std::exception& e) {
+			LOG("Failed to load config file: " << e.what());
+		}
+
 		atexit(SaveConfig);
 	}
 	

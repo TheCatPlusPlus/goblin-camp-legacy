@@ -21,6 +21,7 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <boost/assign/list_inserter.hpp>
 #include <boost/date_time/local_time/local_time.hpp>
 #include <boost/foreach.hpp>
+#include <boost/json.hpp>
 
 #include "data/Config.hpp"
 #include "data/Paths.hpp"
@@ -49,9 +50,27 @@ namespace Config {
 		\throws std::exception Refer to std::ofstream documentation.
 	*/
 	void Save() {
-		std::ofstream config(Paths::Get(Paths::Config).string().c_str());
+		std::ofstream fp;
+		fp.exceptions(std::ios::badbit | std::ios::failbit);
 
-		config.close();
+		boost::json::object cvars;
+		boost::json::object keys;
+
+		for (auto&& [name, value] : Globals::cvars) {
+			cvars[name] = value;
+		}
+
+		for (auto&& [name, value] : Globals::keys) {
+			keys[name] = std::string(&value, &value + 1);
+		}
+
+		boost::json::object config;
+		config["cvars"] = cvars;
+		config["keys"] = keys;
+
+		fp.open(Paths::Get(Paths::Config).string());
+		fp << boost::json::serialize(config);
+		fp.close();
 	}
 	
 	/**

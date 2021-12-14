@@ -166,8 +166,8 @@ namespace Paths {
 		screensDir  = personalDir / "screenshots";
 		modsDir     = personalDir / "mods";
 		tilesetsDir = personalDir / "tilesets";
-		
-		config      = personalDir / "config.py";
+
+		config      = personalDir / "config.json";
 		font        = personalDir / "terminal.png";
 		
 		coreTilesetsDir = dataDir / "lib" / "tilesets_core";
