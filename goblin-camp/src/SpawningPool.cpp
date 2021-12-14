@@ -63,8 +63,7 @@ void SpawningPool::ToggleDumpCorpses(SpawningPool* sp) { sp->dumpCorpses = !sp->
 
 Coordinate SpawningPool::SpawnLocation()
 {
-	Direction dirs[4] = { WEST, EAST, NORTH, SOUTH };
-	std::random_shuffle(dirs,dirs+4); //shuffle to avoid predictability
+	auto dirs = Random::GetShuffledDirections();
 
 	for (int x = a.X(); x <= b.X(); ++x) {
 		for (int y = a.Y(); y <= b.Y(); ++y) {
@@ -183,8 +182,8 @@ void SpawningPool::Update() {
 }
 
 void SpawningPool::Expand(bool message) {
-	Direction dirs[4] = { WEST, EAST, NORTH, SOUTH };
-	std::random_shuffle(dirs,dirs+4); //shuffle to avoid predictability
+	auto dirs = Random::GetShuffledDirections();
+
 	Coordinate location = undefined;
 	for (int i = 0; location == undefined && i < 10; ++i) {
 		Coordinate candidate = Random::ChooseInRectangle(a-1, b+1);

@@ -1351,7 +1351,7 @@ void Game::GenerateMap(uint32 seed) {
 	}
 	
 	{
-		std::auto_ptr<TCODRandom> tcodRandom = std::auto_ptr<TCODRandom>(new TCODRandom(random.GetSeed()));
+		auto tcodRandom = std::make_unique<TCODRandom>(random.GetSeed());
 		map->heightMap->rainErosion(map->Width()*map->Height()*5, 0.005f, 0.30f, tcodRandom.get());
 	}
 

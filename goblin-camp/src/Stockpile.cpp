@@ -372,8 +372,7 @@ bool Stockpile::Allowed(std::set<ItemCategory> cats) {
 
 static bool FindAdjacentTo(const Coordinate& p, int uid, Coordinate *out) {
 	//TODO factorize adjacent traversal over multiple files
-	Direction dirs[4] = { WEST, EAST, NORTH, SOUTH };
-	std::random_shuffle(dirs, dirs+4); //avoid predictabiliy
+	auto dirs = Random::GetShuffledDirections();
 	for (int i = 0; i < 4; ++i) {
 		Coordinate candidate = p + Coordinate::DirectionToCoordinate(dirs[i]);
 		if (Map::Inst()->GetConstruction(candidate) == uid) {
