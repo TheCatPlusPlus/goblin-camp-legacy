@@ -17,16 +17,8 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 
 #include <cstdlib>
 #include <windows.h>
-#include <windowsx.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
 
-#include <boost/scoped_ptr.hpp>
 #include <string>
-#include <sstream>
-
-#define GC_SKIP_RC
-#include "goblin-camp.rch"
 
 #include "Logger.hpp"
 
@@ -39,50 +31,30 @@ void GCDebugInduceCrash() {
 }
 
 namespace {
-	struct AssertData {
-		const char *msg, *expr, *func, *file;
-		int line;
-	};
-	
-	INT_PTR CALLBACK AssertDialog(HWND dialog, UINT msg, WPARAM wParam, LPARAM lParam) {
-		switch (msg) {
-			case WM_INITDIALOG:
-			{
-				const AssertData& data = *((AssertData*)lParam);
-				std::stringstream msg;
-				
-				msg << "Expression:\r\n\t" << data.expr << "\r\n\r\n";
-				if (data.msg) {
-					msg << "Additional info:\r\n\t" << data.msg << "\r\n\r\n";
-				}
-				msg << "Function:\r\n\t" << data.func << "\r\n\r\n";
-				msg << "File:\r\n\t"     << data.file << "\r\n\r\n";
-				msg << "Line:\r\n\t"     << data.line << "\r\n\r\n";
-				
-				std::string msgStr = msg.str();
-				
-				HWND edit = GetDlgItem(dialog, IDC_REASON);
-				Edit_SetText(edit, msgStr.c_str());
-				SendMessage(edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELONG(4, 4));
-				//Edit_SetSel(edit, -1, -1);
-			}
-			break;
-			case WM_COMMAND:
-				switch (wParam) {
-					case ID_DEBUG:
-					case ID_CONTINUE:
-					case ID_EXIT:
-						EndDialog(dialog, wParam);
-					break;
-					default:
-						return FALSE;
-				}
-			break;
-			default:
-				return FALSE;
+	inline std::wstring ToUTF16(const std::string& s)
+	{
+		if (s.empty())
+		{
+			return L"";
 		}
-		
-		return TRUE;
+
+		std::wstring buffer{};
+
+		auto size = MultiByteToWideChar(CP_UTF8, 0, &s[0], static_cast<int>(s.size()), nullptr, 0);
+		if (size == 0)
+		{
+			return L"ToUTF16: failed to get the buffer size";
+		}
+
+		buffer.resize(size);
+
+		size = MultiByteToWideChar(CP_UTF8, 0, &s[0], static_cast<int>(s.size()), &buffer[0], size);
+		if (size == 0)
+		{
+			return L"ToUTF16: failed to transcode the string";
+		}
+
+		return buffer;
 	}
 }
 
@@ -99,27 +71,11 @@ namespace {
 */
 bool GCAssert(const char* msg, const char* expr, const char* function, const char* file, int line) {
 	LOG("Assertion failed: '" << expr << "' (" << function << " in " << file << " at " << line << "): " << msg);
-	
-	SDL_SysWMinfo info;
-	HWND parent = NULL;
-	
-	/*SDL_VERSION(&info.version);
-	if (SDL_GetWMInfo(&info) > 0 && info.window) {
-		parent = info.window;
-	}*/
-	
-	AssertData data = { msg, expr, function, file, line };
-	DWORD ret = DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_ASSERT), parent, &AssertDialog, (LPARAM)&data);
-	
-	switch (ret) {
-		case ID_CONTINUE:
-			return false;
-		case ID_EXIT:
-			exit(424242);
-		default:
-			LOG("Assertion dialog failed, defaulting to 'break to debugger'.");
-			// passthrough
-		case ID_DEBUG:
-			return true;
-	}
+
+	auto fileW = ToUTF16(file);
+	auto exprW = ToUTF16(expr);
+
+	_wassert(exprW.c_str(), fileW.c_str(), line);
+
+	return false;
 }

@@ -15,6 +15,12 @@ You should have received a copy of the GNU General Public License
 along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #pragma once
 
+#if __has_include(<goblin-camp.version.h>)
+#	include <goblin-camp.version.h>
+#else
+#	define GC_VERSION "0.0.0"
+#endif
+
 namespace Globals {
 	extern const char *gameVersion;
 }

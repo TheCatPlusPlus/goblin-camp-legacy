@@ -1,0 +1,1 @@
+#cmakedefine GC_VERSION "@GC_VERSION@"
