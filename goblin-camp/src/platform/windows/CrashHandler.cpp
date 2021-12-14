@@ -188,6 +188,12 @@ namespace {
 	}
 }
 
-void GCInstallExceptionHandler() {
+void GCInstallExceptionHandler()
+{
+	if (IsDebuggerPresent())
+	{
+		return;
+	}
+
 	SetUnhandledExceptionFilter(ExceptionHandler);
 }
