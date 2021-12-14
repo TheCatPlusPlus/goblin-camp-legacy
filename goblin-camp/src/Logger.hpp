@@ -20,17 +20,14 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 // with more automatic formatting (file, line, function) and no more
 // explicit flushing.
 
-#include <fstream>
+#include <sstream>
 
-namespace Logger {
-	extern std::ofstream log;
-	
-	void OpenLogFile(const std::string&);
-	void CloseLogFile();
-	
-	std::ofstream& Prefix(const char* = NULL, int = 0, const char* = NULL);
-	const char* Suffix();
+namespace Logger
+{
+	void Emit(const std::string& message, const char* file, int line, const char* function);
+	void EmitPython(const std::string& message);
+	void OpenLogFile(const std::string &);
 }
 
-#define LOG_FUNC(x, func) Logger::Prefix(__FILE__, __LINE__, func) << x << Logger::Suffix()
+#define LOG_FUNC(x, func) [&](const char* function){ std::stringstream S; S << x; Logger::Emit(S.str(), __FILE__, __LINE__, function); }(func)
 #define LOG(x) LOG_FUNC(x, __FUNCTION__)

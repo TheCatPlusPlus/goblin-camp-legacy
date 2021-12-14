@@ -19,41 +19,43 @@ along with Goblin Camp. If not, see <http://www.gnu.org/licenses/>.*/
 #include <cassert>
 
 #include <boost/date_time/local_time/local_time.hpp>
-#define BOOST_FILESYSTEM_VERSION 3
 #include <boost/filesystem.hpp>
+
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 namespace fs = boost::filesystem;
 
 #include "Logger.hpp"
 
-namespace Logger {
-	std::ofstream log;
-	
-	std::ofstream& Prefix(const char *file, int line, const char *function) {
-		log <<
-			"C++ (`" << fs::path(file).filename().string() << "` @ " <<
-			line << "), `" << function << "`:\n\t"
-		;
-		return log;
+namespace Logger
+{
+	void Emit(const std::string &message, const char *file, int line, const char *function)
+	{
+		spdlog::info("[{}:{}] [{}]\n{}", file, line, function, message);
 	}
-	
-	const char* Suffix() {
-		return "\n================================\n";
+
+	void EmitPython(const std::string &message)
+	{
+		spdlog::info("{}", message);
 	}
-	
-	void OpenLogFile(const std::string& logFile) {
-		// no buffering
-		log.rdbuf()->pubsetbuf(0, 0);
-		log.open(logFile.c_str());
-		log.rdbuf()->pubsetbuf(0, 0);
-		
+
+	void OpenLogFile(const std::string &logFile)
+	{
+		auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+		consoleSink->set_pattern("%v\n");
+
+		auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFile, true);
+		fileSink->set_pattern("[%H:%M:%S] %v\n");
+
+		spdlog::set_level(spdlog::level::debug);
+		spdlog::flush_on(spdlog::level::debug);
+
+		spdlog::default_logger()->sinks().clear();
+		spdlog::default_logger()->sinks().push_back(consoleSink);
+		spdlog::default_logger()->sinks().push_back(fileSink);
+
 		LOG("Log opened " << boost::posix_time::second_clock::local_time());
-		// Instead of explicit closing: to ensure it's always flushed at the end, even when we bail out with exit().
-		atexit(CloseLogFile);
-	}
-	
-	void CloseLogFile() {
-		LOG("Log closed");
-		log.close();
 	}
 }
