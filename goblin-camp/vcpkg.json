@@ -1,0 +1,26 @@
+{
+	"name": "goblin-camp-legacy",
+	"version": "0.1.0",
+	"dependencies": [
+		"boost-filesystem",
+		"boost-serialization",
+		"boost-iostreams",
+		"boost-lambda",
+		"boost-bind",
+		"boost-date-time",
+		"boost-function",
+		"boost-format",
+		"boost-assert",
+		"boost-assign",
+		"boost-math",
+		"boost-numeric-conversion",
+		"boost-multi-array",
+		"boost-random",
+		"boost-ublas",
+		"boost-json",
+		"zlib",
+		"libpng",
+		"sdl1",
+		"spdlog"
+	]
+}

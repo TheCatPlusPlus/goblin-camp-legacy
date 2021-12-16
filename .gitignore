@@ -69,3 +69,9 @@ userdata
 goblin-camp.stdout
 goblin-camp.stderr
 Goblin Camp/linker.props
+.vs/
+.idea/
+out/
+cmake-build-*/
+enc_temp_folder/
+
